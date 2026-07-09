@@ -632,6 +632,20 @@ end
     @test_allocations(Trixi.rhs_parabolic!, semi, sol, 1000)
 end
 
+@testitem "Parabolic1D: TreeMesh1D: elixir_diffusion_ldg_implicit.jl" setup=[
+    Setup,
+    Parabolic1D
+] tags=[:parabolic_part1] begin
+    @test_trixi_include(joinpath(EXAMPLES_DIR, "tree_1d_dgsem",
+                                 "elixir_diffusion_ldg_implicit.jl"),
+                        l2=[5.938549329272694e-6],
+                        linf=[6.25104098415639e-5])
+    @test Trixi.SciMLBase.successful_retcode(sol.retcode)
+    # Ensure that we do not have excessive memory allocations
+    # (e.g., from type instabilities)
+    @test_allocations(Trixi.rhs_parabolic!, semi, sol, 1000)
+end
+
 @testitem "Parabolic1D: TreeMesh1D: elixir_diffusion_ldg_amr_boundary_layer.jl" setup=[
     Setup,
     Parabolic1D
