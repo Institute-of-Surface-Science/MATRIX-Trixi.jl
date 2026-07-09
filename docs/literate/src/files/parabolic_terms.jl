@@ -18,6 +18,14 @@ equations_hyperbolic = LinearScalarAdvectionEquation2D(advection_velocity);
 # Next, we define the parabolic diffusion term. The constructor requires knowledge of
 # `equations_hyperbolic` to be passed in because the [`LaplaceDiffusion2D`](@ref) applies
 # diffusion to every variable of the hyperbolic system.
+#
+# For multivariable systems where each component needs its own diffusivity, use
+# [`LaplaceDiffusionComponentwise1D`](@ref),
+# [`LaplaceDiffusionComponentwise2D`](@ref), or
+# [`LaplaceDiffusionComponentwise3D`](@ref). For example,
+# `LaplaceDiffusionComponentwise1D((0.1, 0.0, 0.0), equations_hyperbolic)`
+# applies Laplace diffusion to the first component only; components with zero
+# diffusivity are immobile with respect to the parabolic operator.
 
 diffusivity = 5.0e-2
 equations_parabolic = LaplaceDiffusion2D(diffusivity, equations_hyperbolic);

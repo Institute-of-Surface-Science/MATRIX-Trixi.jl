@@ -33,3 +33,4 @@ end
 include("laplace_diffusion_1d.jl")
 include("laplace_diffusion_2d.jl")
 include("laplace_diffusion_3d.jl")
+include("laplace_diffusion_componentwise.jl")
