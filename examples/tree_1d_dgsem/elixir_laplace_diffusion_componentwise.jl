@@ -4,41 +4,11 @@ using Trixi
 ###############################################################################
 # semidiscretization of a component-wise diffusion equation
 
-if !isdefined(@__MODULE__, :LinearZeroAdvectionEquation1D)
-    struct LinearZeroAdvectionEquation1D{RealT <: Real} <: Trixi.AbstractEquations{1, 3}
-        zero_speed::RealT
-    end
-end
-
-LinearZeroAdvectionEquation1D() = LinearZeroAdvectionEquation1D(0.0)
-
-Base.similar(equations::LinearZeroAdvectionEquation1D,
-             ::Type{NewRealT}) where {NewRealT} =
-    LinearZeroAdvectionEquation1D(convert(NewRealT, equations.zero_speed))
-
-Trixi.varnames(::typeof(cons2cons), ::LinearZeroAdvectionEquation1D) = ("u1", "u2", "u3")
-Trixi.varnames(::typeof(cons2prim), ::LinearZeroAdvectionEquation1D) = ("u1", "u2", "u3")
-Trixi.varnames(::typeof(cons2entropy), ::LinearZeroAdvectionEquation1D) = ("u1", "u2",
-                                                                           "u3")
-
-@inline Trixi.flux(u, orientation::Integer, ::LinearZeroAdvectionEquation1D) = zero(u)
-
-@inline function Trixi.max_abs_speed_naive(u_ll, u_rr, orientation::Integer,
-                                           equations::LinearZeroAdvectionEquation1D)
-    return abs(equations.zero_speed)
-end
-
-@inline Trixi.have_constant_speed(::LinearZeroAdvectionEquation1D) = Trixi.True()
-@inline Trixi.max_abs_speeds(equations::LinearZeroAdvectionEquation1D) =
-    SVector(abs(equations.zero_speed))
-
-@inline Trixi.cons2prim(u, ::LinearZeroAdvectionEquation1D) = u
-@inline Trixi.prim2cons(u, ::LinearZeroAdvectionEquation1D) = u
-@inline Trixi.cons2entropy(u, ::LinearZeroAdvectionEquation1D) = u
-@inline Trixi.entropy(u, ::LinearZeroAdvectionEquation1D) = 0.5f0 * sum(abs2, u)
-
-equations = LinearZeroAdvectionEquation1D()
-diffusivity() = SVector(0.1, 0.0, 0.0)
+# Use a stationary passive-tracer Euler state as a multivariable carrier.
+# Only the first tracer component has nonzero diffusivity.
+flow_equations = CompressibleEulerEquations1D(1.4)
+equations = PassiveTracerEquations(flow_equations, n_tracers = 2)
+diffusivity() = SVector(0.0, 0.0, 0.0, 0.1, 0.0)
 equations_parabolic = LaplaceDiffusionComponentwise1D(diffusivity(), equations)
 
 solver = DGSEM(polydeg = 3, surface_flux = flux_central)
@@ -50,10 +20,13 @@ mesh = TreeMesh(0.0, 2.0,
                 periodicity = true)
 
 function initial_condition_laplace_diffusion_componentwise(x, t, equations)
-    kappa_1 = diffusivity()[1]
-    return SVector(sinpi(x[1]) * exp(-kappa_1 * pi^2 * t),
-                   cospi(2 * x[1]),
-                   1 + 0.25 * sinpi(3 * x[1]))
+    rho = 1.0
+    rho_v1 = 0.0
+    rho_e_total = 1 / (equations.flow_equations.gamma - 1)
+    kappa_tracer_1 = diffusivity()[4]
+    rho_chi_1 = sinpi(x[1]) * exp(-kappa_tracer_1 * pi^2 * t)
+    rho_chi_2 = 1 + 0.25 * sinpi(3 * x[1])
+    return SVector(rho, rho_v1, rho_e_total, rho_chi_1, rho_chi_2)
 end
 initial_condition = initial_condition_laplace_diffusion_componentwise
 
