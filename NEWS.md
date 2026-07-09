@@ -11,6 +11,9 @@ for human readability.
 - Added an implicit 1D scalar diffusion example using `SemidiscretizationParabolic`,
   `LinearDiffusionEquation1D`, and `TRBDF2` time integration
   ([Institute-of-Surface-Science/MATRIX-Trixi.jl#1](https://github.com/Institute-of-Surface-Science/MATRIX-Trixi.jl/pull/1)).
+- Added `LinearDiffusionEquation3D` for pure scalar diffusion/heat-equation simulations with `SemidiscretizationParabolic`,
+  together with transient 2D and 3D scalar diffusion examples using manufactured periodic solutions
+  ([Institute-of-Surface-Science/MATRIX-Trixi.jl#2](https://github.com/Institute-of-Surface-Science/MATRIX-Trixi.jl/pull/2)).
 
 ## Changes in the v0.16 lifecycle
 
