@@ -289,7 +289,7 @@ function calc_single_boundary_flux!(flux_face_values, u_face_values, t,
     return nothing
 end
 
-function calc_parabolic_fluxes!(flux_parabolic, u, gradients, mesh::DGMultiMesh,
+function calc_parabolic_fluxes!(flux_parabolic, u, gradients, t, mesh::DGMultiMesh,
                                 equations::AbstractEquationsParabolic,
                                 dg::DGMulti, cache, cache_parabolic)
     for dim in eachdim(mesh)
@@ -310,8 +310,9 @@ function calc_parabolic_fluxes!(flux_parabolic, u, gradients, mesh::DGMultiMesh,
         for i in eachindex(local_u_values)
             u_i = local_u_values[i]
             gradients_i = getindex.(gradients, i, e)
+            x_i = SVector(getindex.(mesh.md.xyzq, i, e))
             for dim in eachdim(mesh)
-                flux_parabolic_i = flux(u_i, gradients_i, dim, equations)
+                flux_parabolic_i = flux(u_i, gradients_i, dim, x_i, t, equations)
                 setindex!(flux_parabolic[dim], flux_parabolic_i, i, e)
             end
         end
@@ -479,7 +480,7 @@ function rhs_parabolic!(du, u, t, mesh::DGMultiMesh,
     end
 
     @trixi_timeit timer() "calc parabolic fluxes" begin
-        calc_parabolic_fluxes!(flux_parabolic, u_transformed, gradients,
+        calc_parabolic_fluxes!(flux_parabolic, u_transformed, gradients, t,
                                mesh, equations_parabolic, dg, cache, cache_parabolic)
     end
 

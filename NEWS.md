@@ -8,6 +8,9 @@ for human readability.
 ## Changes in the MATRIX-Trixi.jl fork
 
 #### Added
+- Parabolic volume fluxes may now optionally depend on coordinates and time through
+  `flux(u, gradients, orientation, x, t, equations)`. Existing time-independent flux
+  implementations remain supported.
 - Added an implicit 1D scalar diffusion example using `SemidiscretizationParabolic`,
   `LinearDiffusionEquation1D`, and `TRBDF2` time integration
   ([Institute-of-Surface-Science/MATRIX-Trixi.jl#1](https://github.com/Institute-of-Surface-Science/MATRIX-Trixi.jl/pull/1)).

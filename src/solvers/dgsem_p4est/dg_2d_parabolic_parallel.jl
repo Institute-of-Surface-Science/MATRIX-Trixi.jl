@@ -88,7 +88,7 @@ function rhs_parabolic!(du, u, t,
 
     # Local parabolic flux construction
     @trixi_timeit timer() "calculate parabolic fluxes" begin
-        calc_parabolic_fluxes!(flux_parabolic, gradients, u_transformed, mesh,
+        calc_parabolic_fluxes!(flux_parabolic, gradients, u_transformed, t, mesh,
                                equations_parabolic, dg, cache)
     end
 

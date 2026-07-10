@@ -50,7 +50,7 @@ function rhs_parabolic!(du, u, t, mesh::Union{TreeMesh{2}, TreeMesh{3}},
 
     # Compute and store the parabolic fluxes
     @trixi_timeit timer() "calculate parabolic fluxes" begin
-        calc_parabolic_fluxes!(flux_parabolic, gradients, u_transformed, mesh,
+        calc_parabolic_fluxes!(flux_parabolic, gradients, u_transformed, t, mesh,
                                equations_parabolic, dg, cache)
     end
 
@@ -488,11 +488,13 @@ end
 
 function calc_parabolic_fluxes!(flux_parabolic,
                                 gradients, u_transformed,
+                                t,
                                 mesh::Union{TreeMesh{2}, P4estMesh{2}},
                                 equations_parabolic::AbstractEquationsParabolic,
                                 dg::DG, cache)
     gradients_x, gradients_y = gradients
     flux_parabolic_x, flux_parabolic_y = flux_parabolic # output arrays
+    @unpack node_coordinates = cache.elements
 
     @threaded for element in eachelement(dg, cache)
         for j in eachnode(dg), i in eachnode(dg)
@@ -503,12 +505,14 @@ function calc_parabolic_fluxes!(flux_parabolic,
                                              i, j, element)
             gradients_2_node = get_node_vars(gradients_y, equations_parabolic, dg,
                                              i, j, element)
+            x_node = get_node_coords(node_coordinates, equations_parabolic, dg,
+                                     i, j, element)
 
             # Calculate parabolic flux and store each component for later use
             flux_parabolic_node_x = flux(u_node, (gradients_1_node, gradients_2_node),
-                                         1, equations_parabolic)
+                                         1, x_node, t, equations_parabolic)
             flux_parabolic_node_y = flux(u_node, (gradients_1_node, gradients_2_node),
-                                         2, equations_parabolic)
+                                         2, x_node, t, equations_parabolic)
             set_node_vars!(flux_parabolic_x, flux_parabolic_node_x,
                            equations_parabolic, dg,
                            i, j, element)

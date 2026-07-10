@@ -87,7 +87,7 @@ end
     @test getindex.(gradients[2], 1) ≈ xq .^ 2
 
     u_flux = similar.(gradients)
-    Trixi.calc_parabolic_fluxes!(u_flux, u0, gradients, mesh,
+    Trixi.calc_parabolic_fluxes!(u_flux, u0, gradients, t, mesh,
                                  equations_parabolic,
                                  dg, cache, cache_parabolic)
     @test u_flux[1] ≈ gradients[1]

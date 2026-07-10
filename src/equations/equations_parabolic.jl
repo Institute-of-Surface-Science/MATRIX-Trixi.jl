@@ -12,6 +12,20 @@ gradient_variable_transformation(::AbstractEquationsParabolic) = cons2cons
 # type `AbstractEquationsParabolic{NDIMS, NVARS, GradientVariablesConservative}`.
 struct GradientVariablesConservative end
 
+"""
+    flux(u, gradients, orientation, x, t, equations::AbstractEquationsParabolic)
+
+Calculate a parabolic flux at coordinates `x` and time `t`.
+
+The default implementation forwards to the time-independent method
+`flux(u, gradients, orientation, equations)` to preserve compatibility with existing
+parabolic equation implementations.
+"""
+@inline function flux(u, gradients, orientation::Integer, x, t,
+                      equations::AbstractEquationsParabolic)
+    return flux(u, gradients, orientation, equations)
+end
+
 include("laplace_diffusion.jl")
 
 include("laplace_diffusion_entropy_variables.jl")
