@@ -35,6 +35,18 @@ end
 
 @testitem "Parabolic2D: DGMulti 2D rhs_parabolic!" setup=[Setup, Parabolic2D] tags=[:parabolic_part1] begin
     using Trixi
+
+    struct SpaceTimeDiffusion2D{NVARS} <:
+           Trixi.AbstractEquationsParabolic{2, NVARS,
+                                            GradientVariablesConservative} end
+
+    @inline function Trixi.flux(u, gradients, orientation::Integer, x, t,
+                                ::SpaceTimeDiffusion2D)
+        coefficient = 1 + x[1] + 2 * x[2] + t
+        return coefficient * gradients[orientation]
+    end
+    Trixi.have_space_time_dependent_flux(::SpaceTimeDiffusion2D) = Trixi.True()
+
     dg = DGMulti(polydeg = 2, element_type = Quad(), approximation_type = Polynomial(),
                  surface_integral = SurfaceIntegralWeakForm(flux_central),
                  volume_integral = VolumeIntegralWeakForm())
@@ -88,6 +100,7 @@ end
 
     u_flux = similar.(gradients)
     Trixi.calc_parabolic_fluxes!(u_flux, u0, gradients, t, mesh,
+                                 have_space_time_dependent_flux(equations_parabolic),
                                  equations_parabolic,
                                  dg, cache, cache_parabolic)
     @test u_flux[1] ≈ gradients[1]
@@ -100,6 +113,85 @@ end
                            dg, semi.solver_parabolic, cache, cache_parabolic)
     Trixi.invert_jacobian!(du, mesh, equations_parabolic, dg, cache; scaling = 1.0)
     @test getindex.(du, 1) ≈ 2 * y
+
+    equations_space_time = SpaceTimeDiffusion2D{1}()
+    flux_time = 0.3
+    Trixi.calc_parabolic_fluxes!(u_flux, u0, gradients, flux_time, mesh,
+                                 have_space_time_dependent_flux(equations_space_time),
+                                 equations_space_time,
+                                 dg, cache, cache_parabolic)
+    coefficient = @. 1 + xq + 2 * yq + flux_time
+    @test getindex.(u_flux[1], 1) ≈ coefficient .* getindex.(gradients[1], 1)
+    @test getindex.(u_flux[2], 1) ≈ coefficient .* getindex.(gradients[2], 1)
+end
+
+@trixi_testset "Space- and time-dependent parabolic flux coordinates" begin
+    using Trixi
+
+    struct SpaceTimeDiffusion2D{NVARS} <:
+           Trixi.AbstractEquationsParabolic{2, NVARS,
+                                            GradientVariablesConservative} end
+
+    @inline function Trixi.flux(u, gradients, orientation::Integer, x, t,
+                                ::SpaceTimeDiffusion2D)
+        coefficient = 1 + x[1] + 2 * x[2] + t
+        return coefficient * gradients[orientation]
+    end
+    Trixi.have_space_time_dependent_flux(::SpaceTimeDiffusion2D) = Trixi.True()
+
+    function test_space_time_parabolic_flux_coordinates(mesh)
+        equations = LinearScalarAdvectionEquation2D(0.0, 0.0)
+        equations_parabolic = LaplaceDiffusion2D(1.0, equations)
+        solver = DGSEM(polydeg = 2)
+        initial_condition = (x, t, equations) -> SVector(sinpi(2 * x[1]) *
+                                                         sinpi(2 * x[2]))
+        semi = SemidiscretizationHyperbolicParabolic(mesh,
+                                                     (equations, equations_parabolic),
+                                                     initial_condition, solver;
+                                                     boundary_conditions = (boundary_condition_periodic,
+                                                                            boundary_condition_periodic))
+        ode = semidiscretize(semi, (0.0, 0.01))
+        du = similar(ode.u0)
+        Trixi.rhs_parabolic!(du, ode.u0, semi, 0.0)
+
+        (; u_transformed, gradients, flux_parabolic) = semi.cache_parabolic.parabolic_container
+        equations_space_time = SpaceTimeDiffusion2D{1}()
+        flux_time = 0.3
+        Trixi.calc_parabolic_fluxes!(flux_parabolic, gradients, u_transformed,
+                                     flux_time, mesh,
+                                     have_space_time_dependent_flux(equations_space_time),
+                                     equations_space_time, solver, semi.cache)
+
+        node_coordinates = semi.cache.elements.node_coordinates
+        for element in Trixi.eachelement(solver, semi.cache),
+            j in Trixi.eachnode(solver), i in Trixi.eachnode(solver)
+
+            x_node = Trixi.get_node_coords(node_coordinates, equations_space_time,
+                                           solver, i, j, element)
+            coefficient = 1 + x_node[1] + 2 * x_node[2] + flux_time
+            for orientation in 1:2
+                gradient_node = Trixi.get_node_vars(gradients[orientation],
+                                                    equations_space_time, solver,
+                                                    i, j, element)
+                flux_node = Trixi.get_node_vars(flux_parabolic[orientation],
+                                                equations_space_time, solver,
+                                                i, j, element)
+                @test flux_node ≈ coefficient * gradient_node
+            end
+        end
+    end
+
+    tree_mesh = TreeMesh((0.0, 0.0), (1.0, 1.0),
+                         initial_refinement_level = 1,
+                         n_cells_max = 100,
+                         periodicity = true)
+    test_space_time_parabolic_flux_coordinates(tree_mesh)
+
+    p4est_mesh = P4estMesh((2, 2), polydeg = 2,
+                           coordinates_min = (0.0, 0.0),
+                           coordinates_max = (1.0, 1.0),
+                           periodicity = true)
+    test_space_time_parabolic_flux_coordinates(p4est_mesh)
 end
 
 @testitem "Parabolic2D: DGMulti: elixir_advection_diffusion.jl" setup=[Setup, Parabolic2D] tags=[:parabolic_part1] begin

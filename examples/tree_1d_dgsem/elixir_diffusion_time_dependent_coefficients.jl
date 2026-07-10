@@ -32,6 +32,10 @@ Trixi.varnames(::typeof(cons2entropy), ::TimeDependentDiffusionEquation1D) = ("s
     return Trixi.False()
 end
 
+@inline function Trixi.have_space_time_dependent_flux(::TimeDependentDiffusionEquation1D)
+    return Trixi.True()
+end
+
 @inline function Trixi.flux(u, gradients, orientation::Integer, x, t,
                             equations::TimeDependentDiffusionEquation1D)
     dudx, = gradients

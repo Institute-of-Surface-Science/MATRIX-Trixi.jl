@@ -289,7 +289,15 @@ function calc_single_boundary_flux!(flux_face_values, u_face_values, t,
     return nothing
 end
 
-function calc_parabolic_fluxes!(flux_parabolic, u, gradients, t, mesh::DGMultiMesh,
+@inline function calc_parabolic_fluxes!(flux_parabolic, u, gradients, t,
+                                        mesh::DGMultiMesh, ::False,
+                                        equations::AbstractEquationsParabolic,
+                                        dg::DGMulti, cache, cache_parabolic)
+    return calc_parabolic_fluxes!(flux_parabolic, u, gradients, mesh, equations,
+                                  dg, cache, cache_parabolic)
+end
+
+function calc_parabolic_fluxes!(flux_parabolic, u, gradients, mesh::DGMultiMesh,
                                 equations::AbstractEquationsParabolic,
                                 dg::DGMulti, cache, cache_parabolic)
     for dim in eachdim(mesh)
@@ -307,6 +315,34 @@ function calc_parabolic_fluxes!(flux_parabolic, u, gradients, t, mesh::DGMultiMe
         apply_to_each_field(mul_by!(dg.basis.Vq), local_u_values, view(u, :, e))
 
         # compute parabolic flux at quad points
+        for i in eachindex(local_u_values)
+            u_i = local_u_values[i]
+            gradients_i = getindex.(gradients, i, e)
+            for dim in eachdim(mesh)
+                flux_parabolic_i = flux(u_i, gradients_i, dim, equations)
+                setindex!(flux_parabolic[dim], flux_parabolic_i, i, e)
+            end
+        end
+    end
+
+    return nothing
+end
+
+function calc_parabolic_fluxes!(flux_parabolic, u, gradients, t,
+                                mesh::DGMultiMesh, ::True,
+                                equations::AbstractEquationsParabolic,
+                                dg::DGMulti, cache, cache_parabolic)
+    for dim in eachdim(mesh)
+        set_zero!(flux_parabolic[dim], dg)
+    end
+
+    (; local_u_values_threaded) = cache_parabolic
+
+    @threaded for e in eachelement(mesh, dg)
+        local_u_values = local_u_values_threaded[Threads.threadid()]
+        fill!(local_u_values, zero(eltype(local_u_values)))
+        apply_to_each_field(mul_by!(dg.basis.Vq), local_u_values, view(u, :, e))
+
         for i in eachindex(local_u_values)
             u_i = local_u_values[i]
             gradients_i = getindex.(gradients, i, e)
@@ -481,7 +517,9 @@ function rhs_parabolic!(du, u, t, mesh::DGMultiMesh,
 
     @trixi_timeit timer() "calc parabolic fluxes" begin
         calc_parabolic_fluxes!(flux_parabolic, u_transformed, gradients, t,
-                               mesh, equations_parabolic, dg, cache, cache_parabolic)
+                               mesh,
+                               have_space_time_dependent_flux(equations_parabolic),
+                               equations_parabolic, dg, cache, cache_parabolic)
     end
 
     @trixi_timeit timer() "calc divergence" begin

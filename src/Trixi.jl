@@ -345,7 +345,7 @@ export SemidiscretizationHyperbolic, semidiscretize, compute_coefficients, integ
 export SemidiscretizationParabolic
 
 export SemidiscretizationHyperbolicParabolic
-export have_constant_diffusivity, max_diffusivity
+export have_constant_diffusivity, have_space_time_dependent_flux, max_diffusivity
 
 export SemidiscretizationHyperbolicSplit
 

@@ -13,6 +13,17 @@ gradient_variable_transformation(::AbstractEquationsParabolic) = cons2cons
 struct GradientVariablesConservative end
 
 """
+    have_space_time_dependent_flux(equations::AbstractEquationsParabolic)
+
+Trait function determining whether `equations` use the parabolic flux signature
+`flux(u, gradients, orientation, x, t, equations)`. The default is `False()`, selecting
+the legacy space- and time-independent flux signature.
+
+Custom equations using coordinates or time in their parabolic flux must return `True()`.
+"""
+@inline have_space_time_dependent_flux(::AbstractEquationsParabolic) = False()
+
+"""
     flux(u, gradients, orientation, x, t, equations::AbstractEquationsParabolic)
 
 Calculate a parabolic flux at coordinates `x` and time `t`.
