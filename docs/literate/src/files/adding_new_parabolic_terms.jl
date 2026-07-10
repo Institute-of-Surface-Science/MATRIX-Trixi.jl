@@ -73,6 +73,13 @@ end
 # ```julia
 # Trixi.have_space_time_dependent_flux(::MyParabolicEquations) = Trixi.True()
 # ```
+# For CFL-controlled explicit time integration, nonconstant equations must additionally implement
+# ```julia
+# max_diffusivity(u, x, t, equations_parabolic)
+# ```
+# returning a local upper bound at the supplied state, coordinates, and stage time. The
+# [`StepsizeCallback`](@ref) evaluates this method at every volume node when
+# `have_constant_diffusivity(equations_parabolic) == False()`.
 #
 # Existing equations implementing only
 # `flux(u, gradients, orientation, equations_parabolic)` use the default trait value `False()`

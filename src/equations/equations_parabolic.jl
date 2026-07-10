@@ -37,6 +37,17 @@ parabolic equation implementations.
     return flux(u, gradients, orientation, equations)
 end
 
+"""
+    max_diffusivity(u, x, t, equations::AbstractEquationsParabolic)
+
+Return a local upper bound for the diffusivity at state `u`, coordinates `x`, and time `t`.
+
+The default implementation forwards to `max_diffusivity(u, equations)`.
+"""
+@inline function max_diffusivity(u, x, t, equations::AbstractEquationsParabolic)
+    return max_diffusivity(u, equations)
+end
+
 include("laplace_diffusion.jl")
 
 include("laplace_diffusion_entropy_variables.jl")

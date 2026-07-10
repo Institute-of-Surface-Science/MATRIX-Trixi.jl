@@ -35,14 +35,17 @@ function max_dt(u, t, mesh::TreeMesh{2},
                 dg::DG, cache)
     # Avoid division by zero if the diffusivity vanishes everywhere
     max_scaled_speed = nextfloat(zero(t))
+    @unpack node_coordinates = cache.elements
 
     @batch reduction=(max, max_scaled_speed) for element in eachelement(dg, cache)
         max_diffusivity_ = zero(max_scaled_speed)
         for j in eachnode(dg), i in eachnode(dg)
             u_node = get_node_vars(u, equations, dg, i, j, element)
+            x_node = get_node_coords(node_coordinates, equations_parabolic, dg,
+                                     i, j, element)
             # Note: For the currently supported parabolic equations
             # Diffusion & Navier-Stokes, we only have one diffusivity.
-            diffusivity = max_diffusivity(u_node, equations_parabolic)
+            diffusivity = max_diffusivity(u_node, x_node, t, equations_parabolic)
             max_diffusivity_ = max(max_diffusivity_, diffusivity)
         end
         inv_jacobian = cache.elements.inverse_jacobian[element] # 2 / Δx
@@ -164,13 +167,15 @@ function max_dt(u, t,
     # Avoid division by zero if the diffusivity vanishes everywhere
     max_scaled_diffusivity = nextfloat(zero(t))
 
-    @unpack contravariant_vectors, inverse_jacobian = cache.elements
+    @unpack node_coordinates, contravariant_vectors, inverse_jacobian = cache.elements
 
     @batch reduction=(max, max_scaled_diffusivity) for element in eachelement(dg, cache)
         max_diffusivity1 = max_diffusivity2 = zero(max_scaled_diffusivity)
         for j in eachnode(dg), i in eachnode(dg)
             u_node = get_node_vars(u, equations, dg, i, j, element)
-            diffusivity = max_diffusivity(u_node, equations_parabolic)
+            x_node = get_node_coords(node_coordinates, equations_parabolic, dg,
+                                     i, j, element)
+            diffusivity = max_diffusivity(u_node, x_node, t, equations_parabolic)
 
             # Local diffusivity transformed to the reference element
             Ja11, Ja12 = get_contravariant_vector(1, contravariant_vectors,

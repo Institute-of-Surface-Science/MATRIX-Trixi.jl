@@ -40,12 +40,19 @@ end
            Trixi.AbstractEquationsParabolic{2, NVARS,
                                             GradientVariablesConservative} end
 
+    struct ZeroSpeedEquation2D <: Trixi.AbstractEquations{2, 1} end
+    @inline Trixi.max_abs_speeds(u, ::ZeroSpeedEquation2D) = SVector(zero(eltype(u)),
+                                                                     zero(eltype(u)))
+
     @inline function Trixi.flux(u, gradients, orientation::Integer, x, t,
                                 ::SpaceTimeDiffusion2D)
         coefficient = 1 + x[1] + 2 * x[2] + t
         return coefficient * gradients[orientation]
     end
     Trixi.have_space_time_dependent_flux(::SpaceTimeDiffusion2D) = Trixi.True()
+    Trixi.have_constant_diffusivity(::SpaceTimeDiffusion2D) = Trixi.False()
+    @inline Trixi.max_diffusivity(u, x, t, ::SpaceTimeDiffusion2D) = 1 + x[1] +
+                                                                     2 * x[2] + t
 
     dg = DGMulti(polydeg = 2, element_type = Quad(), approximation_type = Polynomial(),
                  surface_integral = SurfaceIntegralWeakForm(flux_central),
@@ -123,6 +130,15 @@ end
     coefficient = @. 1 + xq + 2 * yq + flux_time
     @test getindex.(u_flux[1], 1) ≈ coefficient .* getindex.(gradients[1], 1)
     @test getindex.(u_flux[2], 1) ≈ coefficient .* getindex.(gradients[2], 1)
+
+    equations_stepsize = ZeroSpeedEquation2D()
+    dt_initial = Trixi.max_dt(u0, 0.0, mesh,
+                              have_constant_diffusivity(equations_space_time),
+                              equations_stepsize, equations_space_time, dg, cache)
+    dt_final = Trixi.max_dt(u0, flux_time, mesh,
+                            have_constant_diffusivity(equations_space_time),
+                            equations_stepsize, equations_space_time, dg, cache)
+    @test dt_final < dt_initial
 end
 
 @testitem "Parabolic2D: Space- and time-dependent parabolic flux coordinates" setup=[
@@ -141,6 +157,9 @@ end
         return coefficient * gradients[orientation]
     end
     Trixi.have_space_time_dependent_flux(::SpaceTimeDiffusion2D) = Trixi.True()
+    Trixi.have_constant_diffusivity(::SpaceTimeDiffusion2D) = Trixi.False()
+    @inline Trixi.max_diffusivity(u, x, t, ::SpaceTimeDiffusion2D) = 1 + x[1] +
+                                                                     2 * x[2] + t
 
     function test_space_time_parabolic_flux_coordinates(mesh)
         equations = LinearScalarAdvectionEquation2D(0.0, 0.0)
@@ -182,6 +201,15 @@ end
                 @test flux_node ≈ coefficient * gradient_node
             end
         end
+
+        u = Trixi.wrap_array(ode.u0, semi)
+        dt_initial = Trixi.max_dt(u, 0.0, mesh,
+                                  have_constant_diffusivity(equations_space_time),
+                                  equations, equations_space_time, solver, semi.cache)
+        dt_final = Trixi.max_dt(u, flux_time, mesh,
+                                have_constant_diffusivity(equations_space_time),
+                                equations, equations_space_time, solver, semi.cache)
+        @test dt_final < dt_initial
     end
 
     tree_mesh = TreeMesh((0.0, 0.0), (1.0, 1.0),

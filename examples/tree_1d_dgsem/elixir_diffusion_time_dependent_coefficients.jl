@@ -36,6 +36,11 @@ end
     return Trixi.True()
 end
 
+@inline function Trixi.max_diffusivity(u, x, t,
+                                       equations::TimeDependentDiffusionEquation1D)
+    return equations.diffusivity(x, t)
+end
+
 @inline function Trixi.flux(u, gradients, orientation::Integer, x, t,
                             equations::TimeDependentDiffusionEquation1D)
     dudx, = gradients
@@ -83,14 +88,14 @@ ode = semidiscretize(semi, tspan)
 summary_callback = SummaryCallback()
 analysis_callback = AnalysisCallback(semi, interval = 100)
 alive_callback = AliveCallback(analysis_interval = 100)
-callbacks = CallbackSet(summary_callback, analysis_callback, alive_callback)
+stepsize_callback = StepsizeCallback(cfl_parabolic = 0.05)
+callbacks = CallbackSet(summary_callback, analysis_callback, alive_callback,
+                        stepsize_callback)
 
 ###############################################################################
 # run the simulation
 
-# Adaptive error control evaluates D(t) and k(t) at every Runge-Kutta stage. A
-# `StepsizeCallback` is intentionally not used since time-dependent CFL estimates are outside
-# the scope of this example.
+# The callback re-evaluates the time-dependent diffusivity when selecting every time step.
 sol = solve(ode, RDPK3SpFSAL49();
-            abstol = 1.0e-8, reltol = 1.0e-8,
+            dt = stepsize_callback(ode), adaptive = false,
             ode_default_options()..., callback = callbacks)

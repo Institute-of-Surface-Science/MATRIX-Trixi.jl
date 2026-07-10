@@ -309,7 +309,8 @@ function max_dt(u, t, mesh::DGMultiMesh,
 
             # estimate diffusive "wavespeed" as diffusivity / h
             # this corresponds to a CFL of h^2 * diffusivity
-            diffusivity = max_diffusivity(u[i, e], equations_parabolic)
+            x_i = SVector(getindex.(md.xyz, i, e))
+            diffusivity = max_diffusivity(u[i, e], x_i, t, equations_parabolic)
             max_speeds = max.(max_speeds, lambda_i, diffusivity / h_e)
         end
         dt_min = min(dt_min, h_e / sum(max_speeds))

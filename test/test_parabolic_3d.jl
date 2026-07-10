@@ -48,6 +48,10 @@ end
         return coefficient * gradients[orientation]
     end
     Trixi.have_space_time_dependent_flux(::SpaceTimeDiffusion3D) = Trixi.True()
+    Trixi.have_constant_diffusivity(::SpaceTimeDiffusion3D) = Trixi.False()
+    @inline Trixi.max_diffusivity(u, x, t, ::SpaceTimeDiffusion3D) = 1 + x[1] +
+                                                                     2 * x[2] +
+                                                                     3 * x[3] + t
 
     function test_space_time_parabolic_flux_coordinates(mesh)
         equations = LinearScalarAdvectionEquation3D(0.0, 0.0, 0.0)
@@ -91,6 +95,15 @@ end
                 @test flux_node ≈ coefficient * gradient_node
             end
         end
+
+        u = Trixi.wrap_array(ode.u0, semi)
+        dt_initial = Trixi.max_dt(u, 0.0, mesh,
+                                  have_constant_diffusivity(equations_space_time),
+                                  equations, equations_space_time, solver, semi.cache)
+        dt_final = Trixi.max_dt(u, flux_time, mesh,
+                                have_constant_diffusivity(equations_space_time),
+                                equations, equations_space_time, solver, semi.cache)
+        @test dt_final < dt_initial
     end
 
     tree_mesh = TreeMesh((0.0, 0.0, 0.0), (1.0, 1.0, 1.0),
