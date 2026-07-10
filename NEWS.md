@@ -15,7 +15,7 @@ for human readability.
   together with transient 2D and 3D scalar diffusion examples using manufactured periodic solutions
   ([Institute-of-Surface-Science/MATRIX-Trixi.jl#2](https://github.com/Institute-of-Surface-Science/MATRIX-Trixi.jl/pull/2)).
 - Added `LaplaceDiffusionComponentwise` for multivariable systems where each solution component can use its own scalar
-  Laplace diffusivity, including zero-diffusivity immobile components
+  Laplace diffusivity, including components with zero parabolic diffusion
   ([Institute-of-Surface-Science/MATRIX-Trixi.jl#3](https://github.com/Institute-of-Surface-Science/MATRIX-Trixi.jl/pull/3)).
 
 ## Changes in the v0.16 lifecycle
