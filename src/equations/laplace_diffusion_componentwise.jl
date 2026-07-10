@@ -20,7 +20,7 @@ struct LaplaceDiffusionComponentwise{NDIMS, E, N, T} <:
 end
 
 function LaplaceDiffusionComponentwise{NDIMS}(diffusivity,
-                                             equations_hyperbolic) where {NDIMS}
+                                              equations_hyperbolic) where {NDIMS}
     nvars = nvariables(equations_hyperbolic)
     if length(diffusivity) != nvars
         throw(ArgumentError("Number of diffusivities must match number of variables."))
@@ -34,14 +34,17 @@ function LaplaceDiffusionComponentwise{NDIMS}(diffusivity,
                                                                      equations_hyperbolic)
 end
 
-LaplaceDiffusionComponentwise1D(diffusivity, equations_hyperbolic) =
+function LaplaceDiffusionComponentwise1D(diffusivity, equations_hyperbolic)
     LaplaceDiffusionComponentwise{1}(diffusivity, equations_hyperbolic)
+end
 
-LaplaceDiffusionComponentwise2D(diffusivity, equations_hyperbolic) =
+function LaplaceDiffusionComponentwise2D(diffusivity, equations_hyperbolic)
     LaplaceDiffusionComponentwise{2}(diffusivity, equations_hyperbolic)
+end
 
-LaplaceDiffusionComponentwise3D(diffusivity, equations_hyperbolic) =
+function LaplaceDiffusionComponentwise3D(diffusivity, equations_hyperbolic)
     LaplaceDiffusionComponentwise{3}(diffusivity, equations_hyperbolic)
+end
 
 # Together with our specialization of `Adapt.adapt_structure`,
 # this allows to move semidiscretizations and their components including
@@ -109,4 +112,10 @@ end
                          dg::ParabolicFormulationLocalDG)
     return dg.penalty_parameter * (u_outer - u_inner) .*
            equations_parabolic.diffusivity
+end
+
+@inline function penalty(u_outer, u_inner, inv_h,
+                         equations_parabolic::LaplaceDiffusionComponentwise,
+                         dg::ParabolicFormulationLocalDG)
+    return penalty(u_outer, u_inner, equations_parabolic, dg)
 end
