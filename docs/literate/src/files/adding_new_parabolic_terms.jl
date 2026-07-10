@@ -75,9 +75,10 @@ end
 # ```
 #
 # Existing equations implementing only
-# `flux(u, gradients, orientation, equations_parabolic)` remain compatible through a fallback
-# that ignores `x` and `t`. The default trait value is `False()`, preserving the original solver
-# kernel and numerical results. Source terms already receive coordinates and time through
+# `flux(u, gradients, orientation, equations_parabolic)` use the default trait value `False()`
+# and therefore retain the original solver kernel and numerical results. The extended flux API
+# also provides a fallback that ignores `x` and `t` and calls this shorter method. Source terms
+# already receive coordinates and time through
 # `source_terms(u, gradients, x, t, equations_parabolic)`. Time-dependent coefficients in both
 # fluxes and source terms must be calculated from the supplied `t`; updating mutable coefficient
 # state only in accepted-step callbacks would give incorrect values at intermediate integrator

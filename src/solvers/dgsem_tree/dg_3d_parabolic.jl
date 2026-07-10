@@ -289,7 +289,8 @@ function prolong2boundaries!(cache, flux_parabolic::Tuple,
 end
 
 @inline function calc_parabolic_fluxes!(flux_parabolic, gradients, u_transformed, t,
-                                        mesh::Union{TreeMesh{3}, P4estMesh{3}}, ::False,
+                                        mesh::Union{TreeMesh{3}, P4estMesh{3}},
+                                        have_space_time_dependent_flux::False,
                                         equations_parabolic::AbstractEquationsParabolic,
                                         dg::DG, cache)
     return calc_parabolic_fluxes!(flux_parabolic, gradients, u_transformed, mesh,
@@ -341,7 +342,8 @@ function calc_parabolic_fluxes!(flux_parabolic, gradients, u_transformed,
 end
 
 function calc_parabolic_fluxes!(flux_parabolic, gradients, u_transformed, t,
-                                mesh::Union{TreeMesh{3}, P4estMesh{3}}, ::True,
+                                mesh::Union{TreeMesh{3}, P4estMesh{3}},
+                                have_space_time_dependent_flux::True,
                                 equations_parabolic::AbstractEquationsParabolic,
                                 dg::DG, cache)
     gradients_x, gradients_y, gradients_z = gradients

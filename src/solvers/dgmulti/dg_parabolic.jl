@@ -290,7 +290,8 @@ function calc_single_boundary_flux!(flux_face_values, u_face_values, t,
 end
 
 @inline function calc_parabolic_fluxes!(flux_parabolic, u, gradients, t,
-                                        mesh::DGMultiMesh, ::False,
+                                        mesh::DGMultiMesh,
+                                        have_space_time_dependent_flux::False,
                                         equations::AbstractEquationsParabolic,
                                         dg::DGMulti, cache, cache_parabolic)
     return calc_parabolic_fluxes!(flux_parabolic, u, gradients, mesh, equations,
@@ -329,7 +330,8 @@ function calc_parabolic_fluxes!(flux_parabolic, u, gradients, mesh::DGMultiMesh,
 end
 
 function calc_parabolic_fluxes!(flux_parabolic, u, gradients, t,
-                                mesh::DGMultiMesh, ::True,
+                                mesh::DGMultiMesh,
+                                have_space_time_dependent_flux::True,
                                 equations::AbstractEquationsParabolic,
                                 dg::DGMulti, cache, cache_parabolic)
     for dim in eachdim(mesh)

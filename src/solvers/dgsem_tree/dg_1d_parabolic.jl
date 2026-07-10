@@ -209,7 +209,8 @@ function calc_interface_flux!(surface_flux_values, mesh::TreeMesh{1},
 end
 
 @inline function calc_parabolic_fluxes!(flux_parabolic, gradients, u_transformed, t,
-                                        mesh::TreeMesh{1}, ::False,
+                                        mesh::TreeMesh{1},
+                                        have_space_time_dependent_flux::False,
                                         equations_parabolic::AbstractEquationsParabolic,
                                         dg::DG, cache)
     return calc_parabolic_fluxes!(flux_parabolic, gradients, u_transformed, mesh,
@@ -239,7 +240,8 @@ function calc_parabolic_fluxes!(flux_parabolic, gradients, u_transformed,
 end
 
 function calc_parabolic_fluxes!(flux_parabolic, gradients, u_transformed, t,
-                                mesh::TreeMesh{1}, ::True,
+                                mesh::TreeMesh{1},
+                                have_space_time_dependent_flux::True,
                                 equations_parabolic::AbstractEquationsParabolic,
                                 dg::DG, cache)
     @unpack node_coordinates = cache.elements
