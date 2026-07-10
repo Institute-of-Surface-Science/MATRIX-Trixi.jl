@@ -77,8 +77,9 @@ end
 # ```julia
 # max_diffusivity(u, x, t, equations_parabolic)
 # ```
-# returning a local upper bound at the supplied state, coordinates, and stage time. The
-# [`StepsizeCallback`](@ref) evaluates this method at every volume node when
+# returning a local upper bound at the supplied state, coordinates, and callback time. The
+# [`StepsizeCallback`](@ref) evaluates this method at the points used by the spatial
+# discretization when
 # `have_constant_diffusivity(equations_parabolic) == False()`.
 #
 # Existing equations implementing only

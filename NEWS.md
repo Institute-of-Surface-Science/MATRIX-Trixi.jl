@@ -8,6 +8,10 @@ for human readability.
 ## Changes in the MATRIX-Trixi.jl fork
 
 #### Added
+- Nonconstant parabolic timestep estimates may now depend on the solution, coordinates,
+  and time through `max_diffusivity(u, x, t, equations)`, including support in
+  `StepsizeCallback` for TreeMesh, P4est, and DGMulti discretizations
+  ([Institute-of-Surface-Science/MATRIX-Trixi.jl#6](https://github.com/Institute-of-Surface-Science/MATRIX-Trixi.jl/pull/6)).
 - Parabolic volume fluxes may now optionally depend on coordinates and time through
   `flux(u, gradients, orientation, x, t, equations)`. Existing time-independent flux
   implementations remain supported

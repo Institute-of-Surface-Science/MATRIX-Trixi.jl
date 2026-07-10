@@ -291,6 +291,20 @@ function dt_polydeg_scaling(dg::DGMulti{3, <:Wedge, <:TensorProductWedge})
     return inv(maximum(dg.basis.N) + 1)
 end
 
+@inline function max_abs_speeds_per_element(u, t, equations, dg::DGMulti,
+                                            element, constant_speed::True)
+    return max_abs_speeds(equations)
+end
+
+function max_abs_speeds_per_element(u, t, equations, dg::DGMulti{NDIMS},
+                                    element, constant_speed::False) where {NDIMS}
+    max_speeds = ntuple(_ -> nextfloat(zero(t)), NDIMS)
+    for i in Base.OneTo(dg.basis.Np)
+        max_speeds = max.(max_speeds, max_abs_speeds(u[i, element], equations))
+    end
+    return max_speeds
+end
+
 # for the stepsize callback
 function max_dt(u, t, mesh::DGMultiMesh,
                 constant_diffusivity::False, equations,
@@ -299,19 +313,25 @@ function max_dt(u, t, mesh::DGMultiMesh,
                 cache) where {NDIMS}
     @unpack md = mesh
     rd = dg.basis
+    (; u_values) = cache.solution_container
+
+    # Parabolic fluxes are evaluated at quadrature points. Use the same state and
+    # coordinates here so the timestep estimate bounds the discretized operator.
+    apply_to_each_field(mul_by!(rd.Vq), u_values, u)
+    constant_speed = have_constant_speed(equations)
 
     dt_min = floatmax(typeof(t))
     for e in eachelement(mesh, dg, cache)
         h_e = StartUpDG.estimate_h(e, rd, md)
-        max_speeds = ntuple(_ -> nextfloat(zero(t)), NDIMS)
-        for i in Base.OneTo(rd.Np) # loop over nodes
-            lambda_i = max_abs_speeds(u[i, e], equations)
-
+        max_speeds = max_abs_speeds_per_element(u, t, equations, dg, e,
+                                                constant_speed)
+        for i in Base.OneTo(rd.Nq)
             # estimate diffusive "wavespeed" as diffusivity / h
             # this corresponds to a CFL of h^2 * diffusivity
-            x_i = SVector(getindex.(md.xyz, i, e))
-            diffusivity = max_diffusivity(u[i, e], x_i, t, equations_parabolic)
-            max_speeds = max.(max_speeds, lambda_i, diffusivity / h_e)
+            x_i = SVector(getindex.(md.xyzq, i, e))
+            diffusivity = max_diffusivity(u_values[i, e], x_i, t,
+                                          equations_parabolic)
+            max_speeds = max.(max_speeds, diffusivity / h_e)
         end
         dt_min = min(dt_min, h_e / sum(max_speeds))
     end
