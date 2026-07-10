@@ -6,6 +6,10 @@
 # implicit workflow in `examples/tree_1d_dgsem/elixir_diffusion_ldg_implicit.jl`,
 # which combines [`SemidiscretizationParabolic`](@ref),
 # [`LinearDiffusionEquation1D`](@ref), and `TRBDF2` time integration.
+# For a generic stiff system with a diffusing and a non-diffusing variable, see
+# `examples/tree_1d_dgsem/elixir_reaction_diffusion_immobile_species_imex.jl`.
+# It places diffusion and local reaction terms in the implicit part of a split problem
+# and advances them with the IMEX method `KenCarp4`.
 
 using OrdinaryDiffEqLowStorageRK
 using Trixi

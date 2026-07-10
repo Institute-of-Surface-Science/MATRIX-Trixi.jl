@@ -623,6 +623,9 @@ end
 # Numerical flux formulations that are independent of the specific system of equations
 include("numerical_fluxes.jl")
 
+# Zero hyperbolic flux
+include("zero_flux_equations_1d.jl")
+
 # Linear scalar advection
 abstract type AbstractLinearScalarAdvectionEquation{NDIMS} <:
               AbstractEquations{NDIMS, 1} end

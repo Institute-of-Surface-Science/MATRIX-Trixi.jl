@@ -17,6 +17,9 @@ for human readability.
 - Added `LaplaceDiffusionComponentwise` for multivariable systems where each solution component can use its own scalar
   Laplace diffusivity, including components with zero parabolic diffusion
   ([Institute-of-Surface-Science/MATRIX-Trixi.jl#3](https://github.com/Institute-of-Surface-Science/MATRIX-Trixi.jl/pull/3)).
+- Added an IMEX reaction-diffusion example with one mobile and one immobile variable,
+  using `KenCarp4` and a stiff reversible exchange reaction
+  ([Institute-of-Surface-Science/MATRIX-Trixi.jl#4](https://github.com/Institute-of-Surface-Science/MATRIX-Trixi.jl/pull/4)).
 
 ## Changes in the v0.16 lifecycle
 
