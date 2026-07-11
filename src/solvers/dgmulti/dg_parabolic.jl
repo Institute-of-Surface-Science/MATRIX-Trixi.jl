@@ -1,11 +1,11 @@
 # version for standard (e.g., non-entropy stable or flux differencing) schemes
-function check_parabolic_solver(::DGMultiMesh,
+function check_parabolic_solver(::DGMultiMesh, ::DGMulti,
                                 ::ParabolicFormulationLocalDG{Nothing})
     throw(ArgumentError("DGMulti requires a positive LDG penalty parameter; " *
                         "use `ParabolicFormulationLocalDG(penalty_parameter)`"))
 end
 
-function check_parabolic_solver(::DGMultiMesh,
+function check_parabolic_solver(::DGMultiMesh, ::DGMulti,
                                 parabolic_scheme::ParabolicFormulationLocalDG)
     penalty_parameter = parabolic_scheme.penalty_parameter
     penalty_parameter > zero(penalty_parameter) ||
@@ -39,6 +39,11 @@ function create_cache_parabolic(mesh::DGMultiMesh,
     invJ = inv.(J)
     dxidxhatj = map(x -> dg.basis.Vq * x, md.rstxyzJ)
 
+    # The LDG penalty is a physical normal flux proportional to 1 / h.
+    # Precompute the local normal inverse length Jf / J at face nodes.
+    J_face = dg.basis.Vf * md.J
+    inverse_normal_lengths = md.Jf ./ J_face
+
     # u_transformed stores "transformed" variables for computing the gradient
     u_transformed = allocate_nested_array(uEltype, nvars, size(md.x), dg)
     gradients = SVector{ndims(mesh)}(ntuple(_ -> similar(u_transformed,
@@ -65,6 +70,7 @@ function create_cache_parabolic(mesh::DGMultiMesh,
             gradient_lift_matrix, projection_face_interpolation_matrix,
             divergence_lift_matrix,
             dxidxhatj, J, invJ, # geometric terms
+            inverse_normal_lengths,
             u_face_values, gradients_face_values, scalar_flux_face_values,
             local_u_values_threaded, local_flux_parabolic_threaded,
             local_flux_face_values_threaded)
@@ -293,7 +299,7 @@ function calc_single_boundary_flux!(flux_face_values, u_face_values, t,
 
     num_faces = StartUpDG.num_faces(rd.element_type)
     num_pts_per_face = rd.Nfq ÷ num_faces
-    (; xyzf, nxyz) = md
+    (; xyzf, nxyz, Jf) = md
     for f in mesh.boundary_faces[boundary_key]
         for i in Base.OneTo(num_pts_per_face)
 
@@ -306,10 +312,17 @@ function calc_single_boundary_flux!(flux_face_values, u_face_values, t,
 
             # for both the gradient and the divergence, the boundary flux is scalar valued.
             # for the gradient, it is the solution; for divergence, it is the normal flux.
-            flux_face_values[fid, e] = boundary_condition(flux_face_values[fid, e],
-                                                          u_face_values[fid, e],
-                                                          face_normal, face_coordinates, t,
-                                                          operator_type, equations)
+            # The gradient boundary condition expects the interior solution trace,
+            # while the divergence boundary condition expects the interior normal flux.
+            flux_inner = operator_type isa Gradient ? u_face_values[fid, e] :
+                         flux_face_values[fid, e]
+            boundary_flux = boundary_condition(flux_inner,
+                                               u_face_values[fid, e],
+                                               face_normal, face_coordinates, t,
+                                               operator_type, equations)
+            flux_face_values[fid, e] = scale_boundary_flux(boundary_flux, Jf[fid, e],
+                                                           operator_type,
+                                                           boundary_condition, equations)
 
             # Here, we use the "strong form" for the Gradient (and the "weak form" for Divergence).
             # `flux_face_values` should contain the boundary values for `u`, and we
@@ -321,6 +334,14 @@ function calc_single_boundary_flux!(flux_face_values, u_face_values, t,
         end
     end
     return nothing
+end
+
+@inline scale_boundary_flux(flux, Jf, operator_type, boundary_condition, equations) = flux
+
+@inline function scale_boundary_flux(flux, Jf, ::Divergence,
+                                     ::BoundaryConditionNeumann,
+                                     equations)
+    return flux * Jf
 end
 
 @inline function calc_parabolic_fluxes!(flux_parabolic, u, gradients, t,
@@ -408,36 +429,41 @@ function calc_parabolic_penalty!(scalar_flux_face_values, u_face_values, t,
                                  equations::AbstractEquationsParabolic,
                                  dg::DGMulti, parabolic_scheme, cache, cache_parabolic)
     # compute fluxes at interfaces
-    (; scalar_flux_face_values) = cache_parabolic
-    (; mapM, mapP) = mesh.md
+    (; inverse_normal_lengths) = cache_parabolic
+    (; mapM, mapP, Jf) = mesh.md
     @threaded for face_node_index in each_face_node_global(mesh, dg)
         idM, idP = mapM[face_node_index], mapP[face_node_index]
         idM == idP && continue
         uM, uP = u_face_values[idM], u_face_values[idP]
-        scalar_flux_face_values[idM] = scalar_flux_face_values[idM] +
-                                       penalty(uP, uM, equations, parabolic_scheme)
+        inverse_normal_length = max(inverse_normal_lengths[idM],
+                                    inverse_normal_lengths[idP])
+        penalty_flux = penalty(uP, uM, inverse_normal_length, equations,
+                               parabolic_scheme)
+        scalar_flux_face_values[idM] += Jf[idM] * penalty_flux
     end
 
     calc_boundary_penalty!(scalar_flux_face_values, u_face_values, t,
                            boundary_conditions, mesh, equations, dg,
-                           parabolic_scheme)
+                           parabolic_scheme, inverse_normal_lengths)
     return nothing
 end
 
 function calc_boundary_penalty!(scalar_flux_face_values, u_face_values, t,
                                 ::BoundaryConditionPeriodic, mesh, equations,
-                                dg::DGMulti, parabolic_scheme)
+                                dg::DGMulti, parabolic_scheme,
+                                inverse_normal_lengths)
     return nothing
 end
 
 function calc_boundary_penalty!(scalar_flux_face_values, u_face_values, t,
                                 boundary_conditions, mesh, equations,
-                                dg::DGMulti, parabolic_scheme)
+                                dg::DGMulti, parabolic_scheme,
+                                inverse_normal_lengths)
     for (boundary_key, boundary_condition) in zip(keys(boundary_conditions),
                                                   boundary_conditions)
         calc_single_boundary_penalty!(scalar_flux_face_values, u_face_values, t,
                                       boundary_condition, boundary_key, mesh, equations,
-                                      dg, parabolic_scheme)
+                                      dg, parabolic_scheme, inverse_normal_lengths)
     end
 
     return nothing
@@ -446,8 +472,9 @@ end
 function calc_single_boundary_penalty!(scalar_flux_face_values, u_face_values, t,
                                        boundary_condition, boundary_key, mesh,
                                        equations, dg::DGMulti{NDIMS},
-                                       parabolic_scheme) where {NDIMS}
-    (; xyzf, nxyz) = mesh.md
+                                       parabolic_scheme,
+                                       inverse_normal_lengths) where {NDIMS}
+    (; xyzf, nxyz, Jf) = mesh.md
     num_faces = StartUpDG.num_faces(dg.basis.element_type)
     num_pts_per_face = dg.basis.Nfq ÷ num_faces
 
@@ -464,9 +491,11 @@ function calc_single_boundary_penalty!(scalar_flux_face_values, u_face_values, t
             # interior state as `flux_inner` makes Neumann conditions return a zero jump.
             u_outer = boundary_condition(u_inner, u_inner, normal, x, t, Gradient(),
                                          equations)
-            scalar_flux_face_values[face_node, element] += penalty(u_outer, u_inner,
-                                                                   equations,
-                                                                   parabolic_scheme)
+            penalty_flux = penalty(u_outer, u_inner,
+                                   inverse_normal_lengths[face_node, element], equations,
+                                   parabolic_scheme)
+            scalar_flux_face_values[face_node, element] += Jf[face_node, element] *
+                                                           penalty_flux
         end
     end
 

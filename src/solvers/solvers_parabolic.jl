@@ -86,7 +86,7 @@ This zero-penalty variant is not supported with [`DGMultiMesh`](@ref); use
 """
 ParabolicFormulationLocalDG() = ParabolicFormulationLocalDG(nothing)
 
-@inline check_parabolic_solver(mesh, parabolic_scheme) = nothing
+@inline check_parabolic_solver(mesh, solver, parabolic_scheme) = nothing
 
 @inline parabolic_penalty_coefficient(parabolic_scheme) = 0
 @inline parabolic_penalty_coefficient(::ParabolicFormulationLocalDG{Nothing}) = 0
