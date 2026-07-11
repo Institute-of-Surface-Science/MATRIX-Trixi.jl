@@ -1,4 +1,19 @@
 # version for standard (e.g., non-entropy stable or flux differencing) schemes
+function check_parabolic_solver(::DGMultiMesh,
+                                ::ParabolicFormulationLocalDG{Nothing})
+    throw(ArgumentError("DGMulti requires a positive LDG penalty parameter; " *
+                        "use `ParabolicFormulationLocalDG(penalty_parameter)`"))
+end
+
+function check_parabolic_solver(::DGMultiMesh,
+                                parabolic_scheme::ParabolicFormulationLocalDG)
+    penalty_parameter = parabolic_scheme.penalty_parameter
+    penalty_parameter > zero(penalty_parameter) ||
+        throw(ArgumentError("DGMulti requires a positive LDG penalty parameter, " *
+                            "got $penalty_parameter"))
+    return nothing
+end
+
 function create_cache_parabolic(mesh::DGMultiMesh,
                                 equations_hyperbolic::AbstractEquations,
                                 dg::DGMulti, n_elements, uEltype)

@@ -77,6 +77,7 @@ function SemidiscretizationHyperbolicParabolic(mesh, equations::Tuple,
 
     @assert ndims(mesh) == ndims(equations)
     @assert ndims(mesh) == ndims(equations_parabolic)
+    check_parabolic_solver(mesh, solver_parabolic)
 
     if !(nvariables(equations) == nvariables(equations_parabolic))
         throw(ArgumentError("Current implementation of parabolic terms requires the same number of conservative and gradient variables."))

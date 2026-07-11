@@ -56,6 +56,8 @@ Convection-Diffusion Systems" by Cockburn and Shu (1998).
 
 The parabolic "upwinding" vector is implemented for `TreeMesh`, `P4estMesh`, and `DGMultiMesh`.
 For meshes with arbitrary face normals, the dominant normal direction determines the LDG switch.
+`DGMultiMesh` requires a positive `penalty_parameter`; the zero-penalty constructor is not
+supported since the dominant-normal switch does not guarantee coercivity on general meshes.
 
 - Cockburn and Shu (1998).
   The Local Discontinuous Galerkin Method for Time-Dependent
@@ -74,12 +76,17 @@ Discontinuous Galerkin Method for Convection–Diffusion Problems" by Cockburn a
 This scheme corresponds to an LDG parabolic "upwinding/downwinding" but no LDG penalty parameter. 
 Cockburn and Dong proved that this scheme is still stable despite the zero penalty parameter. 
 
+This zero-penalty variant is not supported with [`DGMultiMesh`](@ref); use
+`ParabolicFormulationLocalDG(penalty_parameter)` with a positive penalty instead.
+
 - Cockburn and Dong (2007)  
   An Analysis of the Minimal Dissipation Local Discontinuous 
   Galerkin Method for Convection–Diffusion Problems.
   [DOI: 10.1007/s10915-007-9130-3](https://doi.org/10.1007/s10915-007-9130-3)
 """
 ParabolicFormulationLocalDG() = ParabolicFormulationLocalDG(nothing)
+
+@inline check_parabolic_solver(mesh, parabolic_scheme) = nothing
 
 @inline parabolic_penalty_coefficient(parabolic_scheme) = 0
 @inline parabolic_penalty_coefficient(::ParabolicFormulationLocalDG{Nothing}) = 0
