@@ -77,7 +77,7 @@ end
                                                                                 x[2])^2
     Trixi.have_constant_diffusivity(::UniformNonconstantDiffusion2D) = Trixi.False()
     @inline Trixi.max_diffusivity(u, x, t,
-                                  equations::UniformNonconstantDiffusion2D) = equations.diffusivity
+    equations::UniformNonconstantDiffusion2D) = equations.diffusivity
 
     dg = DGMulti(polydeg = 2, element_type = Quad(), approximation_type = Polynomial(),
                  surface_integral = SurfaceIntegralWeakForm(flux_central),
