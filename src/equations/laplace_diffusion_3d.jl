@@ -45,12 +45,4 @@ function flux(u, gradients, orientation::Integer, equations_parabolic::LaplaceDi
     end
 end
 
-# TODO: parabolic; should this remain in the equations file, be moved to solvers, or live in the elixir?
-# The penalization depends on the solver, but also depends explicitly on physical parameters,
-# and would probably need to be specialized for every different equation.
-function penalty(u_outer, u_inner, inv_h, equations_parabolic::LaplaceDiffusion3D,
-                 dg::ParabolicFormulationLocalDG)
-    return dg.penalty_parameter * (u_outer - u_inner) * equations_parabolic.diffusivity
-end
-
 # General Dirichlet and Neumann boundary condition functions are defined in `src/equations/laplace_diffusion_1d.jl`.

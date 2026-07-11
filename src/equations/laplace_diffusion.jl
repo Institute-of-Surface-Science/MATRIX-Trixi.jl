@@ -46,7 +46,7 @@ end
 @inline function penalty(u_outer, u_inner, inv_h,
                          equations_parabolic::AbstractLaplaceDiffusion,
                          dg::ParabolicFormulationLocalDG)
-    return penalty(u_outer, u_inner, equations_parabolic, dg)
+    return inv_h .* penalty(u_outer, u_inner, equations_parabolic, dg)
 end
 
 include("laplace_diffusion_1d.jl")

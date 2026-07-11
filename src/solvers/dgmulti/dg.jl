@@ -357,9 +357,8 @@ function max_dt(u, t, mesh::DGMultiMesh,
             x_i = SVector(getindex.(md.xyzq, i, e))
             diffusivity = max_diffusivity(u_values[i, e], x_i, t,
                                           equations_parabolic)
-            diffusion_speed = diffusivity *
-                              (inv(h_e) +
-                               parabolic_penalty_coefficient(parabolic_scheme))
+            diffusion_speed = diffusivity * inv(h_e) *
+                              (1 + parabolic_penalty_coefficient(parabolic_scheme))
             max_speeds = max.(max_speeds, diffusion_speed)
         end
         dt_min = min(dt_min, h_e / sum(max_speeds))
@@ -398,8 +397,8 @@ function max_dt(u, t, mesh::DGMultiMesh,
         h_e = StartUpDG.estimate_h(e, rd, md)
         max_speeds = max_abs_speeds_per_element(u, t, constant_speed, equations,
                                                 dg, e)
-        diffusion_speed = diffusivity *
-                          (inv(h_e) + parabolic_penalty_coefficient(parabolic_scheme))
+        diffusion_speed = diffusivity * inv(h_e) *
+                          (1 + parabolic_penalty_coefficient(parabolic_scheme))
         max_speeds = max.(max_speeds, diffusion_speed)
         dt_min = min(dt_min, h_e / sum(max_speeds))
     end

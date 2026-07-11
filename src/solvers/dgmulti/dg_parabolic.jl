@@ -160,6 +160,25 @@ function calc_interface_flux_gradient!(scalar_flux_face_values,
     return nothing
 end
 
+@inline function calc_interface_flux_gradient!(scalar_flux_face_values,
+                                               mesh::DGMultiMesh, equations,
+                                               dg::DGMulti,
+                                               parabolic_scheme::ParabolicFormulationLocalDG,
+                                               cache, cache_parabolic)
+    (; u_face_values) = cache_parabolic
+    (; mapM, mapP, nxyz) = mesh.md
+    @threaded for face_node_index in each_face_node_global(mesh, dg)
+        idM, idP = mapM[face_node_index], mapP[face_node_index]
+        uM, uP = u_face_values[idM], u_face_values[idP]
+        normal = SVector(getindex.(nxyz, idM))
+        numerical_trace = flux_parabolic(uM, uP, normal, Gradient(), equations,
+                                         parabolic_scheme)
+        scalar_flux_face_values[idM] = numerical_trace - uM
+    end
+
+    return nothing
+end
+
 function calc_gradient!(gradients, u::StructArray, t, mesh::DGMultiMesh,
                         equations::AbstractEquationsParabolic,
                         boundary_conditions, dg::DGMulti, parabolic_scheme,
@@ -503,6 +522,33 @@ function calc_interface_flux_divergence!(scalar_flux_face_values,
             # Here, we use the "weak" formulation to compute the divergence (to ensure stability on curved meshes).
             flux_face_value = flux_face_value +
                               0.5f0 * (fP + fM) * nxyzJ[dim][face_node_index]
+        end
+        scalar_flux_face_values[idM] = flux_face_value
+    end
+
+    return nothing
+end
+
+@inline function calc_interface_flux_divergence!(scalar_flux_face_values,
+                                                 mesh::DGMultiMesh, equations,
+                                                 dg::DGMulti,
+                                                 parabolic_scheme::ParabolicFormulationLocalDG,
+                                                 cache, cache_parabolic)
+    flux_parabolic_face_values = cache_parabolic.gradients_face_values
+    (; mapM, mapP, nxyz, nxyzJ) = mesh.md
+
+    @threaded for face_node_index in each_face_node_global(mesh, dg, cache,
+                                                           cache_parabolic)
+        idM, idP = mapM[face_node_index], mapP[face_node_index]
+        normal = SVector(getindex.(nxyz, idM))
+
+        flux_face_value = zero(eltype(scalar_flux_face_values))
+        for dim in eachdim(mesh)
+            fM = flux_parabolic_face_values[dim][idM]
+            fP = flux_parabolic_face_values[dim][idP]
+            numerical_flux = flux_parabolic(fM, fP, normal, Divergence(), equations,
+                                            parabolic_scheme)
+            flux_face_value += numerical_flux * nxyzJ[dim][idM]
         end
         scalar_flux_face_values[idM] = flux_face_value
     end
