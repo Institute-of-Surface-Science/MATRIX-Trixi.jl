@@ -2125,12 +2125,26 @@ end
         @test eltype(@inferred cons2prim(u, equations_2d)) == RealT
         @test eltype(@inferred cons2entropy(u, equations_2d)) == RealT
 
+        equations_3d = LinearDiffusionEquation3D(RealT(0.1))
+        @test ndims(equations_3d) == 3
+        @test nvariables(equations_3d) == 1
+        @test max_diffusivity(equations_3d) == RealT(0.1)
+        @test eltype(@inferred cons2prim(u, equations_3d)) == RealT
+        @test eltype(@inferred cons2entropy(u, equations_3d)) == RealT
+        gradients = (one(RealT), RealT(2), RealT(3))
+        @test @inferred(flux(u, gradients, 1, equations_3d)) == SVector(RealT(0.1))
+        @test @inferred(flux(u, gradients, 2, equations_3d)) == SVector(RealT(0.2))
+        @test @inferred(flux(u, gradients, 3, equations_3d)) ≈ SVector(RealT(0.3))
+
         adapted_1d = @inferred Trixi.trixi_adapt(Array, Float32, equations_1d)
         @test adapted_1d isa LinearDiffusionEquation1D{Float32}
         @test typeof(adapted_1d.diffusivity) == Float32
         adapted_2d = @inferred Trixi.trixi_adapt(Array, Float32, equations_2d)
         @test adapted_2d isa LinearDiffusionEquation2D{Float32}
         @test typeof(adapted_2d.diffusivity) == Float32
+        adapted_3d = @inferred Trixi.trixi_adapt(Array, Float32, equations_3d)
+        @test adapted_3d isa LinearDiffusionEquation3D{Float32}
+        @test typeof(adapted_3d.diffusivity) == Float32
     end
 end
 

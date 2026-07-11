@@ -3,6 +3,9 @@
 
 `LaplaceDiffusion3D` represents a scalar diffusion term ``\nabla \cdot (\kappa\nabla u))``
 with diffusivity ``\kappa`` applied to each solution component defined by `equations`.
+This is intended for use as the parabolic part of a hyperbolic-parabolic system, where the
+hyperbolic part is defined by `equations`. For a purely parabolic diffusion equation
+without any hyperbolic part, see [`LinearDiffusionEquation3D`](@ref).
 """
 struct LaplaceDiffusion3D{E, N, T} <: AbstractLaplaceDiffusion{3, N}
     diffusivity::T

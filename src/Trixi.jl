@@ -227,7 +227,7 @@ export NonIdealCompressibleEulerEquations1D, NonIdealCompressibleEulerEquations2
 export IdealGas, ThermallyPerfectGas9PolyFit,
        VanDerWaals, PengRobinson, HelmholtzIdealGas
 
-export LinearDiffusionEquation1D, LinearDiffusionEquation2D,
+export LinearDiffusionEquation1D, LinearDiffusionEquation2D, LinearDiffusionEquation3D,
        LaplaceDiffusion1D, LaplaceDiffusion2D, LaplaceDiffusion3D,
        LaplaceDiffusionEntropyVariables1D, LaplaceDiffusionEntropyVariables2D,
        LaplaceDiffusionEntropyVariables3D,
