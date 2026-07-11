@@ -13,8 +13,8 @@ using Trixi
 @inline diffusivity(x, t) = 0.2 * (1 + 0.25 * sin(t))
 @inline reaction_rate(t) = 0.3 * (1 + 0.2 * cos(t))
 
-# This example-local equation implements only the extended parabolic flux API. Existing
-# Trixi equations continue to use the shorter, time-independent flux method via a fallback.
+# This example-local equation implements only the extended parabolic flux API. Existing Trixi
+# equations retain the original kernel for the shorter, time-independent flux method.
 struct TimeDependentDiffusionEquation1D{F} <: Trixi.AbstractLaplaceDiffusion{1, 1}
     diffusivity::F
 end

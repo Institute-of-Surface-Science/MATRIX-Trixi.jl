@@ -125,7 +125,10 @@ end
     @test getindex.(u_flux[2], 1) ≈ coefficient .* getindex.(gradients[2], 1)
 end
 
-@trixi_testset "Space- and time-dependent parabolic flux coordinates" begin
+@testitem "Parabolic2D: Space- and time-dependent parabolic flux coordinates" setup=[
+    Setup,
+    Parabolic2D
+] tags=[:parabolic_part1] begin
     using Trixi
 
     struct SpaceTimeDiffusion2D{NVARS} <:
