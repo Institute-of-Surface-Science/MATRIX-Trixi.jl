@@ -63,9 +63,10 @@ end
 function NormalParabolicFlux(component::Integer = 1;
                              factor = 1,
                              name::Symbol = :normal_parabolic_flux)
-    component > 0 ||
+    component_int = Int(component)
+    component_int > 0 ||
         throw(ArgumentError("component must be a positive integer, got $component"))
-    return NormalParabolicFlux{component, typeof(factor)}(factor, name)
+    return NormalParabolicFlux{component_int, typeof(factor)}(factor, name)
 end
 
 # This returns the boundary indices of a given iterable datastructure of boundary symbols.
