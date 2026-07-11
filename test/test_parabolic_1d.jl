@@ -724,21 +724,12 @@ end
 ] tags=[:parabolic_part1] begin
     @test_trixi_include(joinpath(EXAMPLES_DIR, "tree_1d_dgsem",
                                  "elixir_diffusion_time_dependent_coefficients.jl"),
-                        initial_refinement_level=3, tspan=(0.0, 0.5), polydeg=3,
-                        l2=[0.00011127453743513846],
-                        linf=[0.0006347950063912977])
-    @test Trixi.SciMLBase.successful_retcode(sol.retcode)
-    coarse_l2_error, coarse_linf_error = analysis_callback(sol)
-
-    @test_trixi_include(joinpath(EXAMPLES_DIR, "tree_1d_dgsem",
-                                 "elixir_diffusion_time_dependent_coefficients.jl"),
-                        initial_refinement_level=4, tspan=(0.0, 0.5), polydeg=3,
-                        l2=[6.984694267453196e-6],
-                        linf=[4.067163421228592e-5])
+                        l2=[6.984694161248236e-6],
+                        linf=[4.0670269742637544e-5])
     @test Trixi.SciMLBase.successful_retcode(sol.retcode)
     fine_l2_error, fine_linf_error = analysis_callback(sol)
-    @test all(fine_l2_error .< coarse_l2_error)
-    @test all(fine_linf_error .< coarse_linf_error)
+    @test all(fine_l2_error .< [0.00011127453743513846])
+    @test all(fine_linf_error .< [0.0006347950063912977])
     @test have_space_time_dependent_flux(equations) == Trixi.True()
 
     semi_flux_only = remake(semi; source_terms = nothing)
@@ -757,6 +748,21 @@ end
           Trixi.flux(SVector(1.0), gradients, 1, x, 0.5, equations)
 
     @test_allocations(Trixi.rhs_parabolic!, semi, sol, 1000)
+end
+
+@testitem "Parabolic1D: Time-dependent coefficients refinement" setup=[
+    Setup,
+    Parabolic1D
+] tags=[:parabolic_part1] begin
+    @test_trixi_include(joinpath(EXAMPLES_DIR, "tree_1d_dgsem",
+                                 "elixir_diffusion_time_dependent_coefficients.jl"),
+                        initial_refinement_level=3,
+                        l2=[0.00011127453743513846],
+                        linf=[0.0006347950063912977])
+    @test Trixi.SciMLBase.successful_retcode(sol.retcode)
+    coarse_l2_error, coarse_linf_error = analysis_callback(sol)
+    @test all([6.984694161248236e-6] .< coarse_l2_error)
+    @test all([4.0670269742637544e-5] .< coarse_linf_error)
 end
 
 @testitem "Parabolic1D: TreeMesh1D: elixir_diffusion_ldg_newton_krylov.jl" setup=[
