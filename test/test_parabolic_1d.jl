@@ -606,6 +606,52 @@ end
     @test_allocations(Trixi.rhs_parabolic!, semi, sol, 1000)
 end
 
+@testitem "Parabolic1D: TreeMesh1D: elixir_reaction_diffusion_immobile_species_imex.jl" setup=[
+    Setup,
+    Parabolic1D
+] tags=[:parabolic_part1] begin
+    @test_trixi_include(joinpath(EXAMPLES_DIR, "tree_1d_dgsem",
+                                 "elixir_reaction_diffusion_immobile_species_imex.jl"),
+                        l2=[2.1610180405591028e-7, 4.193868403256278e-7],
+                        linf=[5.043982367336497e-7, 9.672281314765385e-7])
+    @test Trixi.SciMLBase.successful_retcode(sol.retcode)
+    l2_error, linf_error = analysis_callback(sol)
+    @test maximum(l2_error) < 1.0e-6
+    @test maximum(linf_error) < 1.0e-6
+    @test_nowarn linear_structure(semi)
+
+    reaction_disabled_mode = evolve_reaction_diffusion_mode(1.0, 0.25, 0, 0.1;
+                                                            forward_rate = 0.0,
+                                                            backward_rate = 0.0)
+    @test reaction_disabled_mode == SVector(1.0, 0.25)
+
+    mass_initial = Trixi.integrate(sol.u[1], semi; normalize = false)
+    mass_final = Trixi.integrate(sol.u[end], semi; normalize = false)
+    @test isapprox(sum(mass_final), sum(mass_initial); atol = 1.0e-10, rtol = 1.0e-10)
+
+    du_explicit = similar(sol.u[end])
+    Trixi.rhs!(du_explicit, sol.u[end], semi, sol.t[end])
+    @test iszero(maximum(abs, du_explicit))
+
+    semi_no_reaction = remake(semi; source_terms_parabolic = nothing)
+    ode_no_reaction = semidiscretize(semi_no_reaction, tspan)
+    sol_no_reaction = solve(ode_no_reaction, ode_alg;
+                            abstol = 1.0e-8, reltol = 1.0e-8,
+                            save_everystep = false)
+    @test Trixi.SciMLBase.successful_retcode(sol_no_reaction.retcode)
+
+    u_initial = Trixi.wrap_array(sol_no_reaction.u[1], semi_no_reaction)
+    u_final = Trixi.wrap_array(sol_no_reaction.u[end], semi_no_reaction)
+    mobile_change = maximum(abs, @view(u_final[1, :, :]) .-
+                                 @view(u_initial[1, :, :]))
+    immobile_change = maximum(abs, @view(u_final[2, :, :]) .-
+                                   @view(u_initial[2, :, :]))
+    @test mobile_change > 1.0e-5
+    @test immobile_change < 1.0e-13
+
+    @test_allocations(Trixi.rhs_parabolic!, semi, sol, 1000)
+end
+
 @testitem "Parabolic1D: TreeMesh1D: elixir_laplace_diffusion_componentwise.jl" setup=[
     Setup,
     Parabolic1D

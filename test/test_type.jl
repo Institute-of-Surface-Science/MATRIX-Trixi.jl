@@ -2113,6 +2113,35 @@ end
     end
 end
 
+@testitem "Type stability: Zero Flux Equations 1D" setup=[
+    Setup,
+    TypeStability
+] tags=[:misc_part1] begin
+    equations = ZeroFluxEquations1D(2)
+    @test equations isa ZeroFluxEquations1D{2, Float64}
+    @test ndims(equations) == 1
+    @test nvariables(equations) == 2
+    @test have_constant_speed(equations) == Trixi.True()
+    @test Trixi.max_abs_speeds(equations) == SVector(0.0)
+    @test Trixi.varnames(cons2cons, equations) == ("scalar_1", "scalar_2")
+    @test ZeroFluxEquations1D(Int32(2)) isa ZeroFluxEquations1D{2, Float64}
+    @test ZeroFluxEquations1D(big(2)) isa ZeroFluxEquations1D{2, Float64}
+    @test ZeroFluxEquations1D(2; RealT = Float32) isa ZeroFluxEquations1D{2, Float32}
+    @test_throws ArgumentError ZeroFluxEquations1D(0)
+
+    for RealT in (Float32, Float64)
+        u = SVector(one(RealT), RealT(2))
+        @test iszero(@inferred flux(u, 1, equations))
+        @test iszero(@inferred max_abs_speed_naive(u, u, 1, equations))
+        @test @inferred(cons2prim(u, equations)) === u
+        @test @inferred(cons2entropy(u, equations)) === u
+        @test typeof(@inferred entropy(u, equations)) == RealT
+    end
+
+    adapted = @inferred Trixi.trixi_adapt(Array, Float32, equations)
+    @test adapted isa ZeroFluxEquations1D{2, Float32}
+end
+
 @testitem "Type stability: Laplace Diffusion Componentwise" setup=[
     Setup,
     TypeStability
