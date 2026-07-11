@@ -100,22 +100,3 @@ end
         return equations_parabolic.diffusivity .* dudz
     end
 end
-
-@inline function penalty(u_outer, u_inner,
-                         equations_parabolic::LaplaceDiffusionComponentwise,
-                         dg::ParabolicFormulationLocalDG{Nothing})
-    return zero(u_inner)
-end
-
-@inline function penalty(u_outer, u_inner,
-                         equations_parabolic::LaplaceDiffusionComponentwise,
-                         dg::ParabolicFormulationLocalDG)
-    return dg.penalty_parameter * (u_outer - u_inner) .*
-           equations_parabolic.diffusivity
-end
-
-@inline function penalty(u_outer, u_inner, inv_h,
-                         equations_parabolic::LaplaceDiffusionComponentwise,
-                         dg::ParabolicFormulationLocalDG)
-    return penalty(u_outer, u_inner, equations_parabolic, dg)
-end

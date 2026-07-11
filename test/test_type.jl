@@ -2113,6 +2113,59 @@ end
     end
 end
 
+@testitem "Type stability: Laplace Diffusion Componentwise" setup=[
+    Setup,
+    TypeStability
+] tags=[:misc_part1] begin
+    for RealT in (Float32, Float64)
+        equations_1d = CompressibleEulerEquations1D(RealT(1.4))
+        equations_parabolic_1d = @inferred LaplaceDiffusionComponentwise1D((RealT(0.1),
+                                                                            zero(RealT),
+                                                                            RealT(2)),
+                                                                           equations_1d)
+        @test equations_parabolic_1d.diffusivity ==
+              SVector(RealT(0.1), zero(RealT), RealT(2))
+        @test_throws ArgumentError LaplaceDiffusionComponentwise1D((RealT(0.1),
+                                                                    zero(RealT)),
+                                                                   equations_1d)
+        gradients_1d = (SVector(RealT(4), RealT(5), RealT(6)),)
+        @test @inferred(flux(first(gradients_1d), gradients_1d, 1,
+                            equations_parabolic_1d)) ==
+              SVector(RealT(0.4), zero(RealT), RealT(12))
+        @test @inferred(max_diffusivity(equations_parabolic_1d)) == RealT(2)
+
+        equations_2d = CompressibleEulerEquations2D(RealT(1.4))
+        equations_parabolic_2d = LaplaceDiffusionComponentwise2D((RealT(0.1),
+                                                                  zero(RealT),
+                                                                  RealT(2),
+                                                                  RealT(0.5)),
+                                                                 equations_2d)
+        gradients_2d = (SVector(RealT(4), RealT(5), RealT(6), RealT(7)),
+                        SVector(RealT(7), RealT(8), RealT(9), RealT(10)))
+        @test @inferred(flux(first(gradients_2d), gradients_2d, 2,
+                            equations_parabolic_2d)) ≈
+              SVector(RealT(0.7), zero(RealT), RealT(18), RealT(5))
+
+        equations_3d = CompressibleEulerEquations3D(RealT(1.4))
+        equations_parabolic_3d = LaplaceDiffusionComponentwise3D((RealT(0.1),
+                                                                  zero(RealT),
+                                                                  RealT(2),
+                                                                  RealT(0.5),
+                                                                  RealT(0.25)),
+                                                                 equations_3d)
+        gradient_3d = SVector(RealT(1), RealT(2), RealT(3), RealT(4), RealT(5))
+        gradients_3d = (gradient_3d, gradient_3d, gradient_3d)
+        @test eltype(@inferred flux(gradient_3d, gradients_3d, 3,
+                                    equations_parabolic_3d)) == RealT
+
+        adapted = @inferred Trixi.trixi_adapt(Array, Float32,
+                                              equations_parabolic_1d)
+        @test adapted isa LaplaceDiffusionComponentwise{1}
+        @test eltype(adapted.diffusivity) == Float32
+        @test adapted.equations_hyperbolic isa CompressibleEulerEquations1D{Float32}
+    end
+end
+
 @testitem "Type stability: Linear Diffusion Equation" setup=[Setup, TypeStability] tags=[:misc_part1] begin
     for RealT in (Float32, Float64)
         u = SVector(one(RealT))

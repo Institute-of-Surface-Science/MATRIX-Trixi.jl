@@ -2,6 +2,37 @@
     EXAMPLES_DIR = examples_dir()
 end
 
+@testitem "Parabolic2D: TreeMesh componentwise diffusion RHS" setup=[
+    Setup,
+    Parabolic2D
+] tags=[:parabolic_part1] begin
+    equations = CompressibleEulerEquations2D(1.4)
+    equations_parabolic = LaplaceDiffusionComponentwise2D((0.1, 0.0, 0.0, 0.0),
+                                                          equations)
+    solver = DGSEM(polydeg = 2)
+    mesh = TreeMesh((0.0, 0.0), (1.0, 1.0), initial_refinement_level = 1,
+                    n_cells_max = 100, periodicity = true)
+    initial_condition = function (x, t, equations)
+        rho = 1.0 + 0.1 * sinpi(2 * x[1]) * sinpi(2 * x[2])
+        return SVector(rho, 0.0, 0.0, 1.0 / (equations.gamma - 1))
+    end
+
+    semi = SemidiscretizationHyperbolicParabolic(mesh, (equations, equations_parabolic),
+                                                 initial_condition, solver;
+                                                 solver_parabolic = ParabolicFormulationLocalDG(),
+                                                 boundary_conditions = (boundary_condition_periodic,
+                                                                        boundary_condition_periodic))
+    ode = semidiscretize(semi, (0.0, 0.01))
+    du = similar(ode.u0)
+    @test_nowarn Trixi.rhs_parabolic!(du, ode.u0, semi, 0.0)
+
+    du_wrapped = Trixi.wrap_array(du, semi)
+    @test maximum(abs, selectdim(du_wrapped, 1, 1)) > 1.0e-6
+    for variable in 2:nvariables(equations)
+        @test iszero(maximum(abs, selectdim(du_wrapped, 1, variable)))
+    end
+end
+
 @testitem "Parabolic2D: DGMulti 2D rhs_parabolic!" setup=[Setup, Parabolic2D] tags=[:parabolic_part1] begin
     using Trixi
     dg = DGMulti(polydeg = 2, element_type = Quad(), approximation_type = Polynomial(),
