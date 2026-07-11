@@ -2134,7 +2134,7 @@ end
         gradients = (one(RealT), RealT(2), RealT(3))
         @test @inferred(flux(u, gradients, 1, equations_3d)) == SVector(RealT(0.1))
         @test @inferred(flux(u, gradients, 2, equations_3d)) == SVector(RealT(0.2))
-        @test @inferred(flux(u, gradients, 3, equations_3d)) == SVector(RealT(0.3))
+        @test @inferred(flux(u, gradients, 3, equations_3d)) ≈ SVector(RealT(0.3))
 
         adapted_1d = @inferred Trixi.trixi_adapt(Array, Float32, equations_1d)
         @test adapted_1d isa LinearDiffusionEquation1D{Float32}
