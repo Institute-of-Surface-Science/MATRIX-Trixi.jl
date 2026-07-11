@@ -494,8 +494,7 @@ end
         for face_id in mesh.boundary_faces[boundary_name]
             element_id = (face_id - 1) ÷ number_of_faces + 1
             local_face = (face_id - 1) % number_of_faces
-            face_nodes = (local_face * points_per_face + 1):((local_face + 1) *
-                                                             points_per_face)
+            face_nodes = (local_face * points_per_face + 1):((local_face + 1) * points_per_face)
             append!(coordinate_values,
                     mesh.md.xyzf[coordinate_dimension][face_nodes, element_id])
         end
