@@ -2,6 +2,31 @@
     EXAMPLES_DIR = examples_dir()
 end
 
+@testitem "Parabolic3D: TreeMesh3D: elixir_diffusion_3d.jl" setup=[
+    Setup,
+    Parabolic3D
+] tags=[:parabolic_part2] begin
+    @test_trixi_include(joinpath(EXAMPLES_DIR, "tree_3d_dgsem",
+                                 "elixir_diffusion_3d.jl"),
+                        initial_refinement_level=1,
+                        l2=[0.026282050868514716],
+                        linf=[0.1273413291423443])
+    @test Trixi.SciMLBase.successful_retcode(sol.retcode)
+    coarse_l2_error, coarse_linf_error = analysis_callback(sol)
+
+    @test_trixi_include(joinpath(EXAMPLES_DIR, "tree_3d_dgsem",
+                                 "elixir_diffusion_3d.jl"),
+                        initial_refinement_level=2,
+                        l2=[0.0011351871725921627],
+                        linf=[0.006526059664928474])
+    @test Trixi.SciMLBase.successful_retcode(sol.retcode)
+    fine_l2_error, fine_linf_error = analysis_callback(sol)
+    @test all(fine_l2_error .< coarse_l2_error)
+    @test all(fine_linf_error .< coarse_linf_error)
+    @test max_diffusivity(equations) == diffusivity()
+    @test_allocations(Trixi.rhs_parabolic!, semi, sol, 1000)
+end
+
 @testitem "Parabolic3D: DGMulti: elixir_navierstokes_convergence.jl" setup=[
     Setup,
     Parabolic3D

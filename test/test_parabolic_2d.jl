@@ -1564,6 +1564,30 @@ end
     @test_allocations(Trixi.rhs_parabolic!, semi, sol, 1000)
 end
 
+@testitem "Parabolic2D: TreeMesh2D: elixir_diffusion_2d.jl" setup=[
+    Setup,
+    Parabolic2D
+] tags=[:parabolic_part1] begin
+    @test_trixi_include(joinpath(EXAMPLES_DIR, "tree_2d_dgsem",
+                                 "elixir_diffusion_2d.jl"),
+                        initial_refinement_level=2,
+                        l2=[0.0012719424527102708],
+                        linf=[0.004796263597208306])
+    @test Trixi.SciMLBase.successful_retcode(sol.retcode)
+    coarse_l2_error, coarse_linf_error = analysis_callback(sol)
+
+    @test_trixi_include(joinpath(EXAMPLES_DIR, "tree_2d_dgsem",
+                                 "elixir_diffusion_2d.jl"),
+                        initial_refinement_level=3,
+                        l2=[8.29287801975101e-5],
+                        linf=[0.000657824071300106])
+    @test Trixi.SciMLBase.successful_retcode(sol.retcode)
+    fine_l2_error, fine_linf_error = analysis_callback(sol)
+    @test all(fine_l2_error .< coarse_l2_error)
+    @test all(fine_linf_error .< coarse_linf_error)
+    @test_allocations(Trixi.rhs_parabolic!, semi, sol, 1000)
+end
+
 @testitem "Parabolic2D: TreeMesh2D: elixir_diffusion_steady_state_linear_map.jl" setup=[
     Setup,
     Parabolic2D
