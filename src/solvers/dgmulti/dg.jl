@@ -305,6 +305,22 @@ function max_abs_speeds_per_element(u, t, equations, dg::DGMulti{NDIMS},
     return max_speeds
 end
 
+# `SemidiscretizationParabolic` passes its parabolic equations in both equation slots.
+# Such problems have no hyperbolic characteristic-speed contribution.
+@inline function max_abs_speeds_per_element(u, t,
+                                            equations::AbstractEquationsParabolic,
+                                            dg::DGMulti{NDIMS}, element,
+                                            constant_speed::True) where {NDIMS}
+    return ntuple(_ -> nextfloat(zero(t)), NDIMS)
+end
+
+@inline function max_abs_speeds_per_element(u, t,
+                                            equations::AbstractEquationsParabolic,
+                                            dg::DGMulti{NDIMS}, element,
+                                            constant_speed::False) where {NDIMS}
+    return ntuple(_ -> nextfloat(zero(t)), NDIMS)
+end
+
 # for the stepsize callback
 function max_dt(u, t, mesh::DGMultiMesh,
                 constant_diffusivity::False, equations,
