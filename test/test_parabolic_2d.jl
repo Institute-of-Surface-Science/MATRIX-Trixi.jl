@@ -254,7 +254,7 @@ end
     penalty_parameter = 2.0
     semi_stronger = remake(semi;
                            solver_parabolic = ParabolicFormulationLocalDG(10 *
-                                                                         penalty_parameter))
+                                                                          penalty_parameter))
     semi_penalty = remake(semi;
                           solver_parabolic = ParabolicFormulationLocalDG(penalty_parameter))
     ode_stronger = semidiscretize(semi_stronger, (0.0, 0.01))
