@@ -1,16 +1,26 @@
 # version for standard (e.g., non-entropy stable or flux differencing) schemes
-function check_parabolic_solver(::DGMultiMesh, ::DGMulti,
+@inline function has_dgmulti_boundaries(mesh::DGMultiMesh)
+    return any(boundary_faces -> !isempty(boundary_faces), values(mesh.boundary_faces))
+end
+
+function check_parabolic_solver(mesh::DGMultiMesh, ::DGMulti,
                                 ::ParabolicFormulationLocalDG{Nothing})
-    throw(ArgumentError("DGMulti requires a positive LDG penalty parameter; " *
+    has_dgmulti_boundaries(mesh) || return nothing
+    throw(ArgumentError("DGMulti meshes with physical boundaries require a positive " *
+                        "LDG penalty parameter; " *
                         "use `ParabolicFormulationLocalDG(penalty_parameter)`"))
 end
 
-function check_parabolic_solver(::DGMultiMesh, ::DGMulti,
+function check_parabolic_solver(mesh::DGMultiMesh, ::DGMulti,
                                 parabolic_scheme::ParabolicFormulationLocalDG)
     penalty_parameter = parabolic_scheme.penalty_parameter
-    penalty_parameter > zero(penalty_parameter) ||
-        throw(ArgumentError("DGMulti requires a positive LDG penalty parameter, " *
+    penalty_parameter >= zero(penalty_parameter) ||
+        throw(ArgumentError("DGMulti requires a non-negative LDG penalty parameter, " *
                             "got $penalty_parameter"))
+    if iszero(penalty_parameter) && has_dgmulti_boundaries(mesh)
+        throw(ArgumentError("DGMulti meshes with physical boundaries require a positive " *
+                            "LDG penalty parameter, got $penalty_parameter"))
+    end
     return nothing
 end
 
