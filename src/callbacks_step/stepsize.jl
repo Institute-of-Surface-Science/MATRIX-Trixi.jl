@@ -22,6 +22,10 @@ This is only applicable for semidiscretizations of type
 [`SemidiscretizationHyperbolicParabolic`](@ref) and [`SemidiscretizationParabolic`](@ref).
 To enable checking for parabolic timestep restrictions, provide a value greater than zero for `cfl_parabolic`.
 By default, `cfl_parabolic` is set to zero which means that only the hyperbolic CFL number `cfl` is considered.
+For [`SemidiscretizationParabolic`](@ref), `cfl_parabolic` must be positive since there is no
+hyperbolic timestep restriction to use instead.
+For [`SemidiscretizationHyperbolicParabolic`](@ref), `cfl_parabolic` must be non-negative;
+a value of zero disables the parabolic timestep restriction.
 The keyword argument `cfl_parabolic` must be either a `Real` number, corresponding to a constant
 parabolic CFL number, or a function of time `t` returning a `Real` number.
 
@@ -142,13 +146,16 @@ function (cb::DiscreteCallback{Condition, Affect!})(ode::ODEProblem) where {Cond
     return calculate_dt(u_ode, t, cfl_hyperbolic, cfl_parabolic, semi)
 end
 
+@inline cfl_value(cfl::Real, t) = cfl
+@inline cfl_value(cfl, t) = cfl(t)
+
 # General case for an abstract single (i.e., non-coupled) semidiscretization
 function calculate_dt(u_ode, t, cfl_hyperbolic, cfl_parabolic,
                       semi::AbstractSemidiscretization)
     mesh, equations, solver, cache = mesh_equations_solver_cache(semi)
     u = wrap_array(u_ode, mesh, equations, solver, cache)
 
-    return cfl_hyperbolic(t) * max_dt(u, t, mesh,
+    return cfl_value(cfl_hyperbolic, t) * max_dt(u, t, mesh,
                   have_constant_speed(equations), equations,
                   solver, cache)
 end
@@ -159,20 +166,14 @@ function calculate_dt(u_ode, t, cfl_hyperbolic, cfl_parabolic,
     mesh, equations, solver, cache = mesh_equations_solver_cache(semi)
     u = wrap_array(u_ode, mesh, equations, solver, cache)
 
-    return cfl_parabolic(t) * max_dt(u, t, mesh,
+    cfl_para = cfl_value(cfl_parabolic, t)
+    cfl_para > 0 ||
+        throw(ArgumentError("`SemidiscretizationParabolic` requires a positive " *
+                            "`cfl_parabolic`, got $cfl_para"))
+
+    return cfl_para * max_dt(u, t, mesh,
                   have_constant_diffusivity(equations), equations,
                   equations, solver, cache)
-end
-
-# For Euler-Acoustic simulations with `EulerAcousticsCouplingCallback`
-function calculate_dt(u_ode, t, cfl_hyperbolic::Real, cfl_parabolic::Real,
-                      semi::AbstractSemidiscretization)
-    mesh, equations, solver, cache = mesh_equations_solver_cache(semi)
-    u = wrap_array(u_ode, mesh, equations, solver, cache)
-
-    return cfl_hyperbolic * max_dt(u, t, mesh,
-                  have_constant_speed(equations), equations,
-                  solver, cache)
 end
 
 # Case for a hyperbolic-parabolic semidiscretization
@@ -183,11 +184,13 @@ function calculate_dt(u_ode, t, cfl_hyperbolic, cfl_parabolic,
 
     u = wrap_array(u_ode, mesh, equations, solver, cache)
 
-    dt_hyperbolic = cfl_hyperbolic(t) * max_dt(u, t, mesh,
+    dt_hyperbolic = cfl_value(cfl_hyperbolic, t) * max_dt(u, t, mesh,
                            have_constant_speed(equations), equations,
                            solver, cache)
 
-    cfl_para = cfl_parabolic(t)
+    cfl_para = cfl_value(cfl_parabolic, t)
+    cfl_para >= 0 ||
+        throw(ArgumentError("`cfl_parabolic` must be non-negative, got $cfl_para"))
     if cfl_para > 0 # Check if parabolic CFL should be considered
         dt_parabolic = cfl_para * max_dt(u, t, mesh,
                               have_constant_diffusivity(equations_parabolic), equations,
