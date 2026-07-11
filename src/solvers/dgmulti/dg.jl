@@ -291,6 +291,36 @@ function dt_polydeg_scaling(dg::DGMulti{3, <:Wedge, <:TensorProductWedge})
     return inv(maximum(dg.basis.N) + 1)
 end
 
+@inline function max_abs_speeds_per_element(u, t, equations, dg::DGMulti,
+                                            element, constant_speed::True)
+    return max_abs_speeds(equations)
+end
+
+function max_abs_speeds_per_element(u, t, equations, dg::DGMulti{NDIMS},
+                                    element, constant_speed::False) where {NDIMS}
+    max_speeds = ntuple(_ -> nextfloat(zero(t)), NDIMS)
+    for i in Base.OneTo(dg.basis.Np)
+        max_speeds = max.(max_speeds, max_abs_speeds(u[i, element], equations))
+    end
+    return max_speeds
+end
+
+# `SemidiscretizationParabolic` passes its parabolic equations in both equation slots.
+# Such problems have no hyperbolic characteristic-speed contribution.
+@inline function max_abs_speeds_per_element(u, t,
+                                            equations::AbstractEquationsParabolic,
+                                            dg::DGMulti{NDIMS}, element,
+                                            constant_speed::True) where {NDIMS}
+    return ntuple(_ -> nextfloat(zero(t)), NDIMS)
+end
+
+@inline function max_abs_speeds_per_element(u, t,
+                                            equations::AbstractEquationsParabolic,
+                                            dg::DGMulti{NDIMS}, element,
+                                            constant_speed::False) where {NDIMS}
+    return ntuple(_ -> nextfloat(zero(t)), NDIMS)
+end
+
 # for the stepsize callback
 function max_dt(u, t, mesh::DGMultiMesh,
                 constant_diffusivity::False, equations,
@@ -304,21 +334,22 @@ function max_dt(u, t, mesh::DGMultiMesh,
     # Parabolic fluxes are evaluated at quadrature points. Use the same state and
     # coordinates here so the timestep estimate bounds the discretized operator.
     apply_to_each_field(mul_by!(rd.Vq), u_values, u)
+    constant_speed = have_constant_speed(equations)
 
     dt_min = floatmax(typeof(t))
     for e in eachelement(mesh, dg, cache)
         h_e = StartUpDG.estimate_h(e, rd, md)
-        # The hyperbolic restriction is computed separately in `calculate_dt`.
-        max_diffusive_speeds = ntuple(_ -> nextfloat(zero(t)), NDIMS)
+        max_speeds = max_abs_speeds_per_element(u, t, equations, dg, e,
+                                                constant_speed)
         for i in Base.OneTo(rd.Nq)
             # estimate diffusive "wavespeed" as diffusivity / h
             # this corresponds to a CFL of h^2 * diffusivity
             x_i = SVector(getindex.(md.xyzq, i, e))
             diffusivity = max_diffusivity(u_values[i, e], x_i, t,
                                           equations_parabolic)
-            max_diffusive_speeds = max.(max_diffusive_speeds, diffusivity / h_e)
+            max_speeds = max.(max_speeds, diffusivity / h_e)
         end
-        dt_min = min(dt_min, h_e / sum(max_diffusive_speeds))
+        dt_min = min(dt_min, h_e / sum(max_speeds))
     end
     # This mimics `max_dt` for `TreeMesh`, except that `nnodes(dg)` is replaced by
     # `polydeg+1`. This is because `nnodes(dg)` returns the total number of
@@ -338,14 +369,15 @@ function max_dt(u, t, mesh::DGMultiMesh,
     # estimate diffusive "wavespeed" as diffusivity / h
     # this corresponds to a CFL of h^2 * diffusivity
     diffusivity = max_diffusivity(equations_parabolic)
+    constant_speed = have_constant_speed(equations)
 
     dt_min = floatmax(typeof(t))
     for e in eachelement(mesh, dg, cache)
         h_e = StartUpDG.estimate_h(e, rd, md)
-        # The hyperbolic restriction is computed separately in `calculate_dt`.
-        max_diffusive_speeds = ntuple(_ -> nextfloat(zero(t)), NDIMS)
-        max_diffusive_speeds = max.(max_diffusive_speeds, diffusivity / h_e)
-        dt_min = min(dt_min, h_e / sum(max_diffusive_speeds))
+        max_speeds = max_abs_speeds_per_element(u, t, equations, dg, e,
+                                                constant_speed)
+        max_speeds = max.(max_speeds, diffusivity / h_e)
+        dt_min = min(dt_min, h_e / sum(max_speeds))
     end
     # This mimics `max_dt` for `TreeMesh`, except that `nnodes(dg)` is replaced by
     # `polydeg+1`. This is because `nnodes(dg)` returns the total number of
