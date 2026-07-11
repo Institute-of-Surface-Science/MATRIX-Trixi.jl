@@ -2130,7 +2130,7 @@ end
                                                                    equations_1d)
         gradients_1d = (SVector(RealT(4), RealT(5), RealT(6)),)
         @test @inferred(flux(first(gradients_1d), gradients_1d, 1,
-                            equations_parabolic_1d)) ==
+                             equations_parabolic_1d)) ==
               SVector(RealT(0.4), zero(RealT), RealT(12))
         @test @inferred(max_diffusivity(equations_parabolic_1d)) == RealT(2)
 
@@ -2143,7 +2143,7 @@ end
         gradients_2d = (SVector(RealT(4), RealT(5), RealT(6), RealT(7)),
                         SVector(RealT(7), RealT(8), RealT(9), RealT(10)))
         @test @inferred(flux(first(gradients_2d), gradients_2d, 2,
-                            equations_parabolic_2d)) ≈
+                             equations_parabolic_2d)) ≈
               SVector(RealT(0.7), zero(RealT), RealT(18), RealT(5))
 
         equations_3d = CompressibleEulerEquations3D(RealT(1.4))

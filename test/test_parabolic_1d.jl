@@ -616,15 +616,16 @@ end
                             4.387506658169924e-15, 1.0219956109529742e-5,
                             0.00011135716421812636],
                         linf=[3.219646771412954e-15, 5.003097405398211e-16,
-                              4.884981308350689e-15, 5.97916749279781e-5,
-                              0.0002426087236215846])
+                            4.884981308350689e-15, 5.97916749279781e-5,
+                            0.0002426087236215846])
     @test Trixi.SciMLBase.successful_retcode(sol.retcode)
 
     u_initial = Trixi.wrap_array(sol.u[1], semi)
     u_final = Trixi.wrap_array(sol.u[end], semi)
     for variable in (1, 2, 3, 5)
-        @test maximum(abs, @view(u_final[variable, :, :]) .-
-                           @view(u_initial[variable, :, :])) < 1.0e-13
+        @test maximum(abs,
+                      @view(u_final[variable, :, :]) .-
+                      @view(u_initial[variable, :, :])) < 1.0e-13
     end
 
     @test_allocations(Trixi.rhs!, semi, sol, 1000)
