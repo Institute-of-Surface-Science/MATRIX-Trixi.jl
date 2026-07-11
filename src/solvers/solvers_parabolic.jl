@@ -81,6 +81,12 @@ Cockburn and Dong proved that this scheme is still stable despite the zero penal
 """
 ParabolicFormulationLocalDG() = ParabolicFormulationLocalDG(nothing)
 
+@inline parabolic_penalty_coefficient(parabolic_scheme) = 0
+@inline parabolic_penalty_coefficient(::ParabolicFormulationLocalDG{Nothing}) = 0
+@inline function parabolic_penalty_coefficient(dg::ParabolicFormulationLocalDG)
+    return abs(dg.penalty_parameter)
+end
+
 @doc raw"""
     flux_parabolic(u_ll, u_rr,
                    ::Gradient, equations_parabolic,

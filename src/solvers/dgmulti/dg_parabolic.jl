@@ -378,10 +378,64 @@ function calc_parabolic_penalty!(scalar_flux_face_values, u_face_values, t,
     (; mapM, mapP) = mesh.md
     @threaded for face_node_index in each_face_node_global(mesh, dg)
         idM, idP = mapM[face_node_index], mapP[face_node_index]
+        idM == idP && continue
         uM, uP = u_face_values[idM], u_face_values[idP]
         scalar_flux_face_values[idM] = scalar_flux_face_values[idM] +
                                        penalty(uP, uM, equations, parabolic_scheme)
     end
+
+    calc_boundary_penalty!(scalar_flux_face_values, u_face_values, t,
+                           boundary_conditions, mesh, equations, dg,
+                           parabolic_scheme)
+    return nothing
+end
+
+function calc_boundary_penalty!(scalar_flux_face_values, u_face_values, t,
+                                ::BoundaryConditionPeriodic, mesh, equations,
+                                dg::DGMulti, parabolic_scheme)
+    return nothing
+end
+
+function calc_boundary_penalty!(scalar_flux_face_values, u_face_values, t,
+                                boundary_conditions, mesh, equations,
+                                dg::DGMulti, parabolic_scheme)
+    for (boundary_key, boundary_condition) in zip(keys(boundary_conditions),
+                                                  boundary_conditions)
+        calc_single_boundary_penalty!(scalar_flux_face_values, u_face_values, t,
+                                      boundary_condition, boundary_key, mesh, equations,
+                                      dg, parabolic_scheme)
+    end
+
+    return nothing
+end
+
+function calc_single_boundary_penalty!(scalar_flux_face_values, u_face_values, t,
+                                       boundary_condition, boundary_key, mesh,
+                                       equations, dg::DGMulti{NDIMS},
+                                       parabolic_scheme) where {NDIMS}
+    (; xyzf, nxyz) = mesh.md
+    num_faces = StartUpDG.num_faces(dg.basis.element_type)
+    num_pts_per_face = dg.basis.Nfq ÷ num_faces
+
+    for face in mesh.boundary_faces[boundary_key]
+        element = (face - 1) ÷ num_faces + 1
+        local_face = (face - 1) % num_faces
+        for i in Base.OneTo(num_pts_per_face)
+            face_node = i + local_face * num_pts_per_face
+            u_inner = u_face_values[face_node, element]
+            normal = SVector{NDIMS}(getindex.(nxyz, face_node, element))
+            x = SVector{NDIMS}(getindex.(xyzf, face_node, element))
+
+            # Recover the boundary trace used by the gradient operator. Passing the
+            # interior state as `flux_inner` makes Neumann conditions return a zero jump.
+            u_outer = boundary_condition(u_inner, u_inner, normal, x, t, Gradient(),
+                                         equations)
+            scalar_flux_face_values[face_node, element] += penalty(u_outer, u_inner,
+                                                                   equations,
+                                                                   parabolic_scheme)
+        end
+    end
+
     return nothing
 end
 
