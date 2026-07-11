@@ -8,6 +8,9 @@ for human readability.
 ## Changes in the MATRIX-Trixi.jl fork
 
 #### Added
+- Added a DGMulti pure-diffusion example on a Triangulate.jl mesh, including conversion
+  of integer segment markers to symbolic Dirichlet and Neumann boundary names
+  ([Institute-of-Surface-Science/MATRIX-Trixi.jl#9](https://github.com/Institute-of-Surface-Science/MATRIX-Trixi.jl/pull/9)).
 - Added a complete local discontinuous Galerkin (LDG) parabolic formulation for
   `DGMultiMesh`, including physical-boundary validation, boundary traces,
   metric-scaled penalties, and penalty-aware timestep estimates
