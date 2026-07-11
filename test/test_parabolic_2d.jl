@@ -220,6 +220,27 @@ end
     Parabolic2D
 ] tags=[:parabolic_part1] begin
     using OrdinaryDiffEqLowStorageRK
+    using Random
+
+    struct VariablePenaltyDiffusion2D{F} <: Trixi.AbstractLaplaceDiffusion{2, 1}
+        diffusivity::F
+    end
+
+    Trixi.varnames(::typeof(cons2cons), ::VariablePenaltyDiffusion2D) = ("scalar",)
+    Trixi.varnames(::typeof(cons2prim), ::VariablePenaltyDiffusion2D) = ("scalar",)
+    Trixi.varnames(::typeof(cons2entropy), ::VariablePenaltyDiffusion2D) = ("scalar",)
+    Trixi.cons2prim(u, ::VariablePenaltyDiffusion2D) = u
+    Trixi.cons2entropy(u, ::VariablePenaltyDiffusion2D) = u
+    Trixi.have_constant_diffusivity(::VariablePenaltyDiffusion2D) = Trixi.False()
+    Trixi.have_space_time_dependent_flux(::VariablePenaltyDiffusion2D) = Trixi.True()
+    @inline function Trixi.max_diffusivity(u, x, t,
+                                           equations::VariablePenaltyDiffusion2D)
+        return equations.diffusivity(x, t)
+    end
+    @inline function Trixi.flux(u, gradients, orientation::Integer, x, t,
+                                equations::VariablePenaltyDiffusion2D)
+        return equations.diffusivity(x, t) * gradients[orientation]
+    end
 
     dg = DGMulti(polydeg = 2, element_type = Quad(), approximation_type = Polynomial(),
                  surface_integral = SurfaceIntegralWeakForm(flux_central),
@@ -236,6 +257,26 @@ end
                 save_everystep = false)
     @test Trixi.SciMLBase.successful_retcode(sol.retcode)
     @test sum(abs2, sol.u[end]) < sum(abs2, sol.u[1])
+
+    # Diagonal triangular faces have equal-magnitude normal components. The LDG
+    # switch must still be opposite on both sides so periodic diffusion conserves mass.
+    dg_tri = DGMulti(polydeg = 2, element_type = Tri(),
+                     approximation_type = Polynomial(),
+                     surface_integral = SurfaceIntegralWeakForm(flux_central),
+                     volume_integral = VolumeIntegralWeakForm())
+    periodic_mesh_tri = DGMultiMesh(dg_tri, (2, 2), periodicity = true)
+    semi_tri = SemidiscretizationParabolic(periodic_mesh_tri, equations,
+                                           initial_condition, dg_tri;
+                                           solver_parabolic = ParabolicFormulationLocalDG(1.0),
+                                           boundary_conditions = boundary_condition_periodic)
+    ode_tri = semidiscretize(semi_tri, (0.0, 0.01))
+    u_tri = similar(ode_tri.u0)
+    Random.seed!(1234)
+    rand!(Trixi.StructArrays.components(parent(u_tri))[1])
+    du_tri = similar(u_tri)
+    Trixi.rhs_parabolic!(du_tri, u_tri, semi_tri, 0.0)
+    integrated_rhs_tri = Trixi.integrate(du_tri, semi_tri; normalize = false)
+    @test maximum(abs, integrated_rhs_tri) < 1.0e-12
 
     constant_initial_condition = (x, t, equations) -> SVector(one(x[1]))
     for parabolic_scheme in (ParabolicFormulationLocalDG(),
@@ -273,6 +314,18 @@ end
     boundary_conditions = (; left = dirichlet, right = dirichlet,
                            bottom = dirichlet, top = dirichlet)
 
+    variable_equations = VariablePenaltyDiffusion2D((x, t) -> 0.1 *
+                                                              (1 + x[1]^2 + t))
+    semi_variable = SemidiscretizationParabolic(physical_mesh, variable_equations,
+                                                initial_condition, dg;
+                                                solver_parabolic = ParabolicFormulationLocalDG(1.0),
+                                                boundary_conditions)
+    ode_variable = semidiscretize(semi_variable, (0.0, 0.01))
+    du_variable = similar(ode_variable.u0)
+    @test_nowarn Trixi.rhs_parabolic!(du_variable, ode_variable.u0,
+                                      semi_variable, 0.2)
+    @test all(isfinite, du_variable)
+
     for parabolic_scheme in (ParabolicFormulationLocalDG(),
                              ParabolicFormulationLocalDG(0.0),
                              ParabolicFormulationLocalDG(-1.0))
@@ -306,6 +359,13 @@ end
     u_outer = SVector(2.0)
     @test Trixi.penalty(u_outer, u_inner, 3.0, equations,
                         ParabolicFormulationLocalDG(2.0)) ≈ SVector(0.6)
+    x_penalty = SVector(0.5, 0.0)
+    t_penalty = 0.2
+    expected_diffusivity = variable_equations.diffusivity(x_penalty, t_penalty)
+    @test Trixi.penalty(u_outer, u_inner, 3.0, x_penalty, t_penalty,
+                        variable_equations,
+                        ParabolicFormulationLocalDG(2.0)) ≈
+          SVector(6 * expected_diffusivity)
 
     carrier = CompressibleEulerEquations2D(1.4)
     equations_componentwise = LaplaceDiffusionComponentwise2D((0.1, 0.0, 0.0, 0.0),

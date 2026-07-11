@@ -191,6 +191,17 @@ function calc_interface_flux_gradient!(scalar_flux_face_values,
     return nothing
 end
 
+@inline function dgmulti_ldg_normal(nxyz, idM, idP)
+    normal_M = SVector(getindex.(nxyz, idM))
+    idM == idP && return normal_M
+
+    # Face normals interpolated independently from both elements may not be exact
+    # opposites. Antisymmetrization guarantees that both sides choose opposite LDG
+    # switches, including when dominant normal components have equal magnitude.
+    normal_P = SVector(getindex.(nxyz, idP))
+    return normal_M - normal_P
+end
+
 @inline function calc_interface_flux_gradient!(scalar_flux_face_values,
                                                mesh::DGMultiMesh, equations,
                                                dg::DGMulti,
@@ -201,7 +212,7 @@ end
     @threaded for face_node_index in each_face_node_global(mesh, dg)
         idM, idP = mapM[face_node_index], mapP[face_node_index]
         uM, uP = u_face_values[idM], u_face_values[idP]
-        normal = SVector(getindex.(nxyz, idM))
+        normal = dgmulti_ldg_normal(nxyz, idM, idP)
         numerical_trace = flux_parabolic(uM, uP, normal, Gradient(), equations,
                                          parabolic_scheme)
         scalar_flux_face_values[idM] = numerical_trace - uM
@@ -440,14 +451,17 @@ function calc_parabolic_penalty!(scalar_flux_face_values, u_face_values, t,
                                  dg::DGMulti, parabolic_scheme, cache, cache_parabolic)
     # compute fluxes at interfaces
     (; inverse_normal_lengths) = cache_parabolic
-    (; mapM, mapP, Jf) = mesh.md
+    (; mapM, mapP, Jf, xyzf) = mesh.md
     @threaded for face_node_index in each_face_node_global(mesh, dg)
         idM, idP = mapM[face_node_index], mapP[face_node_index]
         idM == idP && continue
         uM, uP = u_face_values[idM], u_face_values[idP]
         inverse_normal_length = max(inverse_normal_lengths[idM],
                                     inverse_normal_lengths[idP])
-        penalty_flux = penalty(uP, uM, inverse_normal_length, equations,
+        xM = SVector(getindex.(xyzf, idM))
+        xP = SVector(getindex.(xyzf, idP))
+        x = 0.5f0 * (xM + xP)
+        penalty_flux = penalty(uP, uM, inverse_normal_length, x, t, equations,
                                parabolic_scheme)
         scalar_flux_face_values[idM] += Jf[idM] * penalty_flux
     end
@@ -502,8 +516,8 @@ function calc_single_boundary_penalty!(scalar_flux_face_values, u_face_values, t
             u_outer = boundary_condition(u_inner, u_inner, normal, x, t, Gradient(),
                                          equations)
             penalty_flux = penalty(u_outer, u_inner,
-                                   inverse_normal_lengths[face_node, element], equations,
-                                   parabolic_scheme)
+                                   inverse_normal_lengths[face_node, element], x, t,
+                                   equations, parabolic_scheme)
             scalar_flux_face_values[face_node, element] += Jf[face_node, element] *
                                                            penalty_flux
         end
@@ -594,7 +608,7 @@ end
     @threaded for face_node_index in each_face_node_global(mesh, dg, cache,
                                                            cache_parabolic)
         idM, idP = mapM[face_node_index], mapP[face_node_index]
-        normal = SVector(getindex.(nxyz, idM))
+        normal = dgmulti_ldg_normal(nxyz, idM, idP)
 
         flux_face_value = zero(eltype(scalar_flux_face_values))
         for dim in eachdim(mesh)
