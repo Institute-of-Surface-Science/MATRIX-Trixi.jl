@@ -467,12 +467,12 @@ end
     @test_trixi_include(joinpath(EXAMPLES_DIR, "dgmulti_2d",
                                  "elixir_diffusion_triangulate_pkg_mesh.jl"),
                         polydeg=2, mesh_size=0.45, tspan=(0.0, 0.05),
-                        l2=[0.0008682685913976326],
-                        linf=[0.0053949932776693466])
+                        l2=[0.000866366165081298],
+                        linf=[0.0053946772230686335])
     @test Trixi.SciMLBase.successful_retcode(sol.retcode)
     coarse_l2_error, coarse_linf_error = analysis_callback(sol)
-    @test all([0.00023350852505360221] .< coarse_l2_error)
-    @test all([0.0015358129193425718] .< coarse_linf_error)
+    @test all([0.00023559213035217064] .< coarse_l2_error)
+    @test all([0.001535851920118958] .< coarse_linf_error)
     @test semi.solver_parabolic isa ParabolicFormulationLocalDG
     @test semi.solver_parabolic.penalty_parameter > 0
 
@@ -531,12 +531,12 @@ end
     @test_trixi_include(joinpath(EXAMPLES_DIR, "dgmulti_2d",
                                  "elixir_diffusion_triangulate_pkg_mesh.jl"),
                         polydeg=2, mesh_size=0.3, tspan=(0.0, 0.05),
-                        l2=[0.00023350852505360221],
-                        linf=[0.0015358129193425718])
+                        l2=[0.00023559213035217064],
+                        linf=[0.001535851920118958])
     @test Trixi.SciMLBase.successful_retcode(sol.retcode)
     fine_l2_error, fine_linf_error = analysis_callback(sol)
-    @test all(fine_l2_error .< [0.0008682685913976326])
-    @test all(fine_linf_error .< [0.0053949932776693466])
+    @test all(fine_l2_error .< [0.000866366165081298])
+    @test all(fine_linf_error .< [0.0053946772230686335])
 end
 
 @testitem "Parabolic2D: DGMulti: elixir_advection_diffusion.jl" setup=[Setup, Parabolic2D] tags=[:parabolic_part1] begin
