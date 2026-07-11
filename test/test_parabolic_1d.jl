@@ -638,9 +638,21 @@ end
 ] tags=[:parabolic_part1] begin
     @test_trixi_include(joinpath(EXAMPLES_DIR, "tree_1d_dgsem",
                                  "elixir_diffusion_ldg_implicit.jl"),
+                        initial_refinement_level=3,
+                        l2=[6.551916685521166e-5],
+                        linf=[0.0004907349680308348])
+    @test Trixi.SciMLBase.successful_retcode(sol.retcode)
+    coarse_l2_error, coarse_linf_error = analysis_callback(sol)
+
+    @test_trixi_include(joinpath(EXAMPLES_DIR, "tree_1d_dgsem",
+                                 "elixir_diffusion_ldg_implicit.jl"),
+                        initial_refinement_level=4,
                         l2=[5.938549329272694e-6],
                         linf=[6.25104098415639e-5])
     @test Trixi.SciMLBase.successful_retcode(sol.retcode)
+    fine_l2_error, fine_linf_error = analysis_callback(sol)
+    @test all(fine_l2_error .< coarse_l2_error)
+    @test all(fine_linf_error .< coarse_linf_error)
     # Ensure that we do not have excessive memory allocations
     # (e.g., from type instabilities)
     @test_allocations(Trixi.rhs_parabolic!, semi, sol, 1000)
