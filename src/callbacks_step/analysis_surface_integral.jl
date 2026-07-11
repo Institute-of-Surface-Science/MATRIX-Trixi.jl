@@ -34,6 +34,40 @@ struct AnalysisSurfaceIntegral{Variable, NBoundaries}
     end
 end
 
+@doc raw"""
+    NormalParabolicFlux(component::Integer = 1;
+                        factor = 1,
+                        name::Symbol = :normal_parabolic_flux)
+
+Calculate the instantaneous outward normal parabolic flux of `component` through the
+boundaries selected by [`AnalysisSurfaceIntegral`](@ref). If several boundaries are selected,
+their contributions are summed.
+
+The reported value is based on the final numerical boundary flux used by the parabolic
+divergence discretization. For equations written as
+```math
+\partial_t u = \nabla \cdot (D \nabla u),
+```
+the conventional Fickian flux is obtained with `factor = -1`. The initial implementation
+supports purely parabolic one-dimensional [`TreeMesh`](@ref) semidiscretizations only.
+
+- `component::Integer`: Index of the parabolic flux component
+- `factor`: Multiplicative factor applied to the outward normal flux
+- `name::Symbol`: Name used in analysis output
+"""
+struct NormalParabolicFlux{Component, Factor}
+    factor::Factor
+    name::Symbol
+end
+
+function NormalParabolicFlux(component::Integer = 1;
+                             factor = 1,
+                             name::Symbol = :normal_parabolic_flux)
+    component > 0 ||
+        throw(ArgumentError("component must be a positive integer, got $component"))
+    return NormalParabolicFlux{component, typeof(factor)}(factor, name)
+end
+
 # This returns the boundary indices of a given iterable datastructure of boundary symbols.
 function get_boundary_indices(boundary_symbols, boundary_symbol_indices)
     indices = Int[]
@@ -126,6 +160,19 @@ function pretty_form_utf(::AnalysisSurfaceIntegral{<:DragCoefficientShearStress{
     return "CD_f"
 end
 
+function pretty_form_ascii(surface_variable::AnalysisSurfaceIntegral{Variable}) where {
+                                                                                       Variable <:
+                                                                                       NormalParabolicFlux}
+    return String(surface_variable.variable.name)
+end
+
+function pretty_form_utf(surface_variable::AnalysisSurfaceIntegral{Variable}) where {
+                                                                                     Variable <:
+                                                                                     NormalParabolicFlux}
+    return String(surface_variable.variable.name)
+end
+
+include("analysis_surface_integral_1d.jl")
 include("analysis_surface_integral_2d.jl")
 include("analysis_surface_integral_3d.jl")
 end # muladd
