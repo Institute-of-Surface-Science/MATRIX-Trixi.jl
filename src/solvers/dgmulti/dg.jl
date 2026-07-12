@@ -291,13 +291,14 @@ function dt_polydeg_scaling(dg::DGMulti{3, <:Wedge, <:TensorProductWedge})
     return inv(maximum(dg.basis.N) + 1)
 end
 
-@inline function max_abs_speeds_per_element(u, t, equations, dg::DGMulti,
-                                            element, constant_speed::True)
+@inline function max_abs_speeds_per_element(u, t, constant_speed::True,
+                                            equations, dg::DGMulti, element)
     return max_abs_speeds(equations)
 end
 
-function max_abs_speeds_per_element(u, t, equations, dg::DGMulti{NDIMS},
-                                    element, constant_speed::False) where {NDIMS}
+function max_abs_speeds_per_element(u, t, constant_speed::False,
+                                    equations, dg::DGMulti{NDIMS},
+                                    element) where {NDIMS}
     max_speeds = ntuple(_ -> nextfloat(zero(t)), NDIMS)
     for i in Base.OneTo(dg.basis.Np)
         max_speeds = max.(max_speeds, max_abs_speeds(u[i, element], equations))
@@ -308,16 +309,16 @@ end
 # `SemidiscretizationParabolic` passes its parabolic equations in both equation slots.
 # Such problems have no hyperbolic characteristic-speed contribution.
 @inline function max_abs_speeds_per_element(u, t,
+                                            constant_speed::True,
                                             equations::AbstractEquationsParabolic,
-                                            dg::DGMulti{NDIMS}, element,
-                                            constant_speed::True) where {NDIMS}
+                                            dg::DGMulti{NDIMS}, element) where {NDIMS}
     return ntuple(_ -> nextfloat(zero(t)), NDIMS)
 end
 
 @inline function max_abs_speeds_per_element(u, t,
+                                            constant_speed::False,
                                             equations::AbstractEquationsParabolic,
-                                            dg::DGMulti{NDIMS}, element,
-                                            constant_speed::False) where {NDIMS}
+                                            dg::DGMulti{NDIMS}, element) where {NDIMS}
     return ntuple(_ -> nextfloat(zero(t)), NDIMS)
 end
 
@@ -339,8 +340,8 @@ function max_dt(u, t, mesh::DGMultiMesh,
     dt_min = floatmax(typeof(t))
     for e in eachelement(mesh, dg, cache)
         h_e = StartUpDG.estimate_h(e, rd, md)
-        max_speeds = max_abs_speeds_per_element(u, t, equations, dg, e,
-                                                constant_speed)
+        max_speeds = max_abs_speeds_per_element(u, t, constant_speed, equations,
+                                                dg, e)
         for i in Base.OneTo(rd.Nq)
             # estimate diffusive "wavespeed" as diffusivity / h
             # this corresponds to a CFL of h^2 * diffusivity
@@ -374,8 +375,8 @@ function max_dt(u, t, mesh::DGMultiMesh,
     dt_min = floatmax(typeof(t))
     for e in eachelement(mesh, dg, cache)
         h_e = StartUpDG.estimate_h(e, rd, md)
-        max_speeds = max_abs_speeds_per_element(u, t, equations, dg, e,
-                                                constant_speed)
+        max_speeds = max_abs_speeds_per_element(u, t, constant_speed, equations,
+                                                dg, e)
         max_speeds = max.(max_speeds, diffusivity / h_e)
         dt_min = min(dt_min, h_e / sum(max_speeds))
     end
