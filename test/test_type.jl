@@ -2224,6 +2224,16 @@ end
         @test eltype(@inferred cons2prim(u, equations_2d)) == RealT
         @test eltype(@inferred cons2entropy(u, equations_2d)) == RealT
 
+        coefficient_2d = SpatiallyVaryingDiffusivity((x, t, equations) -> one(eltype(x)),
+                                                     one(RealT))
+        equations_variable_2d = LinearDiffusionEquation2D(coefficient_2d)
+        gradients_2d = (SVector(one(RealT)), SVector(RealT(2)))
+        x_2d = SVector(zero(RealT), zero(RealT))
+        @test @inferred(flux(u, gradients_2d, 1, x_2d, t,
+                             equations_variable_2d)) == SVector(one(RealT))
+        @test @inferred(max_diffusivity(u, x_2d, t,
+                                        equations_variable_2d)) == one(RealT)
+
         equations_3d = LinearDiffusionEquation3D(RealT(0.1))
         @test ndims(equations_3d) == 3
         @test nvariables(equations_3d) == 1
@@ -2239,8 +2249,12 @@ end
         @test adapted_1d isa LinearDiffusionEquation1D{Float32}
         @test typeof(adapted_1d.diffusivity) == Float32
         adapted_2d = @inferred Trixi.trixi_adapt(Array, Float32, equations_2d)
-        @test adapted_2d isa LinearDiffusionEquation2D{Float32}
-        @test typeof(adapted_2d.diffusivity) == Float32
+        @test adapted_2d isa LinearDiffusionEquation2D{ConstantDiffusivity{Float32}}
+        @test adapted_2d.diffusivity isa ConstantDiffusivity{Float32}
+        adapted_variable_2d = @inferred Trixi.trixi_adapt(Array, Float32,
+                                                          equations_variable_2d)
+        @test adapted_variable_2d.diffusivity isa SpatiallyVaryingDiffusivity{<:Any,
+                                          Float32}
         adapted_3d = @inferred Trixi.trixi_adapt(Array, Float32, equations_3d)
         @test adapted_3d isa LinearDiffusionEquation3D{Float32}
         @test typeof(adapted_3d.diffusivity) == Float32
@@ -2329,7 +2343,7 @@ end
 
         adapted = @inferred Trixi.trixi_adapt(Array, Float32, equations_parabolic)
         @test adapted isa LaplaceDiffusion2D
-        @test typeof(adapted.diffusivity) == Float32
+        @test adapted.diffusivity isa ConstantDiffusivity{Float32}
         @test adapted.equations_hyperbolic isa LinearScalarAdvectionEquation2D{Float32}
     end
 end

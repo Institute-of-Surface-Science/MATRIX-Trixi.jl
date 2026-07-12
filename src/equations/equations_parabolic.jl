@@ -48,6 +48,8 @@ The default implementation forwards to `max_diffusivity(u, equations)`.
     return max_diffusivity(u, equations)
 end
 
+include("diffusivity_coefficients.jl")
+
 include("laplace_diffusion.jl")
 
 include("laplace_diffusion_entropy_variables.jl")
