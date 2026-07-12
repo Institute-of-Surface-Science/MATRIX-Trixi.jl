@@ -460,6 +460,85 @@ end
     test_space_time_parabolic_flux_coordinates(p4est_mesh)
 end
 
+@testitem "Parabolic2D: DGMulti tagged triangular diffusion" setup=[
+    Setup,
+    Parabolic2D
+] tags=[:parabolic_part1] begin
+    @test_trixi_include(joinpath(EXAMPLES_DIR, "dgmulti_2d",
+                                 "elixir_diffusion_triangulate_pkg_mesh.jl"),
+                        polydeg=2, mesh_size=0.45, tspan=(0.0, 0.05),
+                        l2=[0.000866366165081298],
+                        linf=[0.0053946772230686335])
+    @test Trixi.SciMLBase.successful_retcode(sol.retcode)
+    coarse_l2_error, coarse_linf_error = analysis_callback(sol)
+    @test all([0.00023559213035217064] .< coarse_l2_error)
+    @test all([0.001535851920118958] .< coarse_linf_error)
+    @test semi.solver_parabolic isa ParabolicFormulationLocalDG
+    @test semi.solver_parabolic.penalty_parameter > 0
+
+    expected_boundary_names = Set((:bottom, :right, :top, :left))
+    @test Set(keys(mesh.boundary_faces)) == expected_boundary_names
+    @test all(name -> !isempty(mesh.boundary_faces[name]), expected_boundary_names)
+
+    face_connectivity = vec(mesh.md.FToF)
+    all_boundary_faces = findall(face_connectivity .== eachindex(face_connectivity))
+    tagged_boundary_faces = sort!(vcat(values(mesh.boundary_faces)...))
+    @test tagged_boundary_faces == all_boundary_faces
+    @test allunique(tagged_boundary_faces)
+
+    function boundary_coordinate_values(mesh, solver, boundary_name,
+                                        coordinate_dimension)
+        number_of_faces = StartUpDG.num_faces(solver.basis.element_type)
+        points_per_face = solver.basis.Nfq ÷ number_of_faces
+        coordinate_values = Float64[]
+        for face_id in mesh.boundary_faces[boundary_name]
+            element_id = (face_id - 1) ÷ number_of_faces + 1
+            local_face = (face_id - 1) % number_of_faces
+            face_nodes = (local_face * points_per_face + 1):((local_face + 1) * points_per_face)
+            append!(coordinate_values,
+                    mesh.md.xyzf[coordinate_dimension][face_nodes, element_id])
+        end
+        return coordinate_values
+    end
+
+    coordinate_tolerance = 500 * eps(Float64)
+    @test all(value -> isapprox(value, -1.0; atol = coordinate_tolerance, rtol = 0.0),
+              boundary_coordinate_values(mesh, solver, :bottom, 2))
+    @test all(value -> isapprox(value, 1.0; atol = coordinate_tolerance, rtol = 0.0),
+              boundary_coordinate_values(mesh, solver, :right, 1))
+    @test all(value -> isapprox(value, 1.0; atol = coordinate_tolerance, rtol = 0.0),
+              boundary_coordinate_values(mesh, solver, :top, 2))
+    @test all(value -> isapprox(value, -1.0; atol = coordinate_tolerance, rtol = 0.0),
+              boundary_coordinate_values(mesh, solver, :left, 1))
+
+    steady_initial_condition = (x, t, equations) -> SVector(one(x[2]) + x[2])
+    semi_steady = SemidiscretizationParabolic(mesh, equations,
+                                              steady_initial_condition, solver;
+                                              solver_parabolic,
+                                              boundary_conditions)
+    ode_steady = semidiscretize(semi_steady, tspan)
+    du_steady = similar(ode_steady.u0)
+    Trixi.rhs_parabolic!(du_steady, ode_steady.u0, semi_steady, first(tspan))
+    @test maximum(abs, du_steady) < 1.0e-11
+
+    @test_allocations(Trixi.rhs_parabolic!, semi, sol, 1000)
+end
+
+@testitem "Parabolic2D: DGMulti tagged triangular diffusion refinement" setup=[
+    Setup,
+    Parabolic2D
+] tags=[:parabolic_part1] begin
+    @test_trixi_include(joinpath(EXAMPLES_DIR, "dgmulti_2d",
+                                 "elixir_diffusion_triangulate_pkg_mesh.jl"),
+                        polydeg=2, mesh_size=0.3, tspan=(0.0, 0.05),
+                        l2=[0.00023559213035217064],
+                        linf=[0.001535851920118958])
+    @test Trixi.SciMLBase.successful_retcode(sol.retcode)
+    fine_l2_error, fine_linf_error = analysis_callback(sol)
+    @test all(fine_l2_error .< [0.000866366165081298])
+    @test all(fine_linf_error .< [0.0053946772230686335])
+end
+
 @testitem "Parabolic2D: DGMulti: elixir_advection_diffusion.jl" setup=[Setup, Parabolic2D] tags=[:parabolic_part1] begin
     @test_trixi_include(joinpath(EXAMPLES_DIR, "dgmulti_2d",
                                  "elixir_advection_diffusion.jl"),
