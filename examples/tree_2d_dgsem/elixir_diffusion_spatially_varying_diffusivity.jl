@@ -5,7 +5,7 @@ using Trixi
 # Pure diffusion equation with a smooth spatially varying coefficient
 
 amplitude() = 0.25
-diffusivity_bound() = 1.25
+diffusivity_bound() = one(amplitude()) + abs(amplitude())
 
 @inline function diffusivity(x, t, equations)
     local_amplitude = convert(eltype(x), amplitude())
@@ -30,9 +30,10 @@ end
     exp_t = exp(-t)
     scalar = exp_t * sx * sy
     local_amplitude = convert(eltype(x), amplitude())
-    local_diffusivity = one(eltype(x)) + local_amplitude * sx * sy
-    laplace_u = -2 * pi^2 * scalar
-    grad_diffusivity_dot_grad_u = local_amplitude * pi^2 * exp_t *
+    local_diffusivity = diffusivity(x, t, equations)
+    local_pi_squared = convert(eltype(x), pi)^2
+    laplace_u = -2 * local_pi_squared * scalar
+    grad_diffusivity_dot_grad_u = local_amplitude * local_pi_squared * exp_t *
                                   ((cx * sy)^2 + (sx * cy)^2)
     divergence = local_diffusivity * laplace_u + grad_diffusivity_dot_grad_u
 

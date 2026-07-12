@@ -35,12 +35,16 @@ function Base.similar(equations::LaplaceDiffusion2D, ::Type{NewRealT}) where {Ne
                               similar(equations.equations_hyperbolic, NewRealT))
 end
 
-@inline have_constant_diffusivity(::LaplaceDiffusion2D{<:Any, <:Any, <:SpatiallyVaryingDiffusivity}) = False()
-@inline have_space_time_dependent_flux(::LaplaceDiffusion2D{<:Any, <:Any, <:SpatiallyVaryingDiffusivity}) = True()
+@inline function have_constant_diffusivity(equations::LaplaceDiffusion2D)
+    return have_constant_diffusivity(equations.diffusivity)
+end
+
+@inline function have_space_time_dependent_flux(equations::LaplaceDiffusion2D)
+    return have_space_time_dependent_flux(equations.diffusivity)
+end
 
 @inline function max_diffusivity(u, x, t,
-                                 equations::LaplaceDiffusion2D{<:Any, <:Any,
-                                                               <:SpatiallyVaryingDiffusivity})
+                                 equations::LaplaceDiffusion2D)
     return diffusivity_upper_bound(equations.diffusivity)
 end
 
@@ -49,8 +53,14 @@ function varnames(variable_mapping, equations_parabolic::LaplaceDiffusion2D)
 end
 
 function flux(u, gradients, orientation::Integer,
-              equations_parabolic::LaplaceDiffusion2D{<:Any, <:Any,
-                                                      <:ConstantDiffusivity})
+              equations_parabolic::LaplaceDiffusion2D)
+    return flux(u, gradients, orientation,
+                have_space_time_dependent_flux(equations_parabolic),
+                equations_parabolic)
+end
+
+function flux(u, gradients, orientation::Integer, ::False,
+              equations_parabolic::LaplaceDiffusion2D)
     dudx, dudy = gradients
     diffusivity = diffusivity_value(equations_parabolic.diffusivity,
                                     equations_parabolic)
@@ -61,9 +71,13 @@ function flux(u, gradients, orientation::Integer,
     end
 end
 
+function flux(u, gradients, orientation::Integer, ::True,
+              equations_parabolic::LaplaceDiffusion2D)
+    throw(ArgumentError("space- or time-dependent diffusivity requires coordinates and time"))
+end
+
 @inline function flux(u, gradients, orientation::Integer, x, t,
-                      equations_parabolic::LaplaceDiffusion2D{<:Any, <:Any,
-                                                              <:SpatiallyVaryingDiffusivity})
+                      equations_parabolic::LaplaceDiffusion2D)
     diffusivity = diffusivity_value(equations_parabolic.diffusivity, x, t,
                                     equations_parabolic)
     return SVector(diffusivity * gradients[orientation])

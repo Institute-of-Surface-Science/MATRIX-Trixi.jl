@@ -37,11 +37,16 @@ function Base.similar(equations::LinearDiffusionEquation2D,
     return LinearDiffusionEquation2D(similar(equations.diffusivity, NewRealT))
 end
 
-@inline have_constant_diffusivity(::LinearDiffusionEquation2D{<:SpatiallyVaryingDiffusivity}) = False()
-@inline have_space_time_dependent_flux(::LinearDiffusionEquation2D{<:SpatiallyVaryingDiffusivity}) = True()
+@inline function have_constant_diffusivity(equations::LinearDiffusionEquation2D)
+    return have_constant_diffusivity(equations.diffusivity)
+end
+
+@inline function have_space_time_dependent_flux(equations::LinearDiffusionEquation2D)
+    return have_space_time_dependent_flux(equations.diffusivity)
+end
 
 @inline function max_diffusivity(u, x, t,
-                                 equations::LinearDiffusionEquation2D{<:SpatiallyVaryingDiffusivity})
+                                 equations::LinearDiffusionEquation2D)
     return diffusivity_upper_bound(equations.diffusivity)
 end
 
@@ -56,7 +61,13 @@ varnames(::typeof(cons2entropy), ::LinearDiffusionEquation2D) = ("scalar",)
 @inline entropy(u, equations::LinearDiffusionEquation2D) = entropy(u[1], equations)
 
 @inline function flux(u, gradients, orientation::Integer,
-                      equations::LinearDiffusionEquation2D{<:ConstantDiffusivity})
+                      equations::LinearDiffusionEquation2D)
+    return flux(u, gradients, orientation,
+                have_space_time_dependent_flux(equations), equations)
+end
+
+@inline function flux(u, gradients, orientation::Integer, ::False,
+                      equations::LinearDiffusionEquation2D)
     dudx, dudy = gradients
     diffusivity = diffusivity_value(equations.diffusivity, equations)
     if orientation == 1
@@ -66,8 +77,13 @@ varnames(::typeof(cons2entropy), ::LinearDiffusionEquation2D) = ("scalar",)
     end
 end
 
+@inline function flux(u, gradients, orientation::Integer, ::True,
+                      equations::LinearDiffusionEquation2D)
+    throw(ArgumentError("space- or time-dependent diffusivity requires coordinates and time"))
+end
+
 @inline function flux(u, gradients, orientation::Integer, x, t,
-                      equations::LinearDiffusionEquation2D{<:SpatiallyVaryingDiffusivity})
+                      equations::LinearDiffusionEquation2D)
     diffusivity = diffusivity_value(equations.diffusivity, x, t, equations)
     return SVector(diffusivity * gradients[orientation])
 end

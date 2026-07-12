@@ -2,6 +2,10 @@
     AbstractDiffusivityCoefficient
 
 Abstract type for scalar isotropic diffusivity coefficient providers.
+
+Subtypes must implement `have_constant_diffusivity`,
+`have_space_time_dependent_flux`, `diffusivity_value`, `diffusivity_upper_bound`,
+and `Base.similar`.
 """
 abstract type AbstractDiffusivityCoefficient end
 
@@ -13,6 +17,9 @@ Constant scalar diffusivity coefficient.
 struct ConstantDiffusivity{T <: Real} <: AbstractDiffusivityCoefficient
     value::T
 end
+
+@inline have_constant_diffusivity(::ConstantDiffusivity) = True()
+@inline have_space_time_dependent_flux(::ConstantDiffusivity) = False()
 
 """
     SpatiallyVaryingDiffusivity(value_function, upper_bound)
@@ -40,6 +47,17 @@ struct SpatiallyVaryingDiffusivity{F, T <: Real} <: AbstractDiffusivityCoefficie
     end
 end
 
+@inline have_constant_diffusivity(::SpatiallyVaryingDiffusivity) = False()
+@inline have_space_time_dependent_flux(::SpatiallyVaryingDiffusivity) = True()
+
+@inline function have_constant_diffusivity(coefficient::AbstractDiffusivityCoefficient)
+    error("Interface: Must implement have_constant_diffusivity(::$(typeof(coefficient)))")
+end
+
+@inline function have_space_time_dependent_flux(coefficient::AbstractDiffusivityCoefficient)
+    error("Interface: Must implement have_space_time_dependent_flux(::$(typeof(coefficient)))")
+end
+
 @inline diffusivity_value(coefficient::ConstantDiffusivity, equations) = coefficient.value
 
 @inline function diffusivity_value(coefficient::ConstantDiffusivity, x, t, equations)
@@ -51,9 +69,17 @@ end
     return coefficient.value_function(x, t, equations)
 end
 
+@inline function diffusivity_value(coefficient::AbstractDiffusivityCoefficient, args...)
+    error("Interface: Must implement diffusivity_value(::$(typeof(coefficient)), ...)")
+end
+
 @inline diffusivity_upper_bound(coefficient::ConstantDiffusivity) = coefficient.value
 @inline function diffusivity_upper_bound(coefficient::SpatiallyVaryingDiffusivity)
     return coefficient.upper_bound
+end
+
+@inline function diffusivity_upper_bound(coefficient::AbstractDiffusivityCoefficient)
+    error("Interface: Must implement diffusivity_upper_bound(::$(typeof(coefficient)))")
 end
 
 # Fallbacks for existing equation types that still store diffusivity values directly.
