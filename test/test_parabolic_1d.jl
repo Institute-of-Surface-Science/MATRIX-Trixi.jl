@@ -724,12 +724,12 @@ end
 ] tags=[:parabolic_part1] begin
     @test_trixi_include(joinpath(EXAMPLES_DIR, "tree_1d_dgsem",
                                  "elixir_diffusion_time_dependent_coefficients.jl"),
-                        l2=[6.984694161248236e-6],
-                        linf=[4.0670269742637544e-5])
+                        l2=[6.984694319086482e-6],
+                        linf=[4.066890902476583e-5])
     @test Trixi.SciMLBase.successful_retcode(sol.retcode)
     fine_l2_error, fine_linf_error = analysis_callback(sol)
-    @test all(fine_l2_error .< [0.00011127453743513846])
-    @test all(fine_linf_error .< [0.0006347950063912977])
+    @test all(fine_l2_error .< [0.00011127464521867602])
+    @test all(fine_linf_error .< [0.0006347956752195128])
     @test have_space_time_dependent_flux(equations) == Trixi.True()
 
     semi_flux_only = remake(semi; source_terms = nothing)
@@ -747,6 +747,23 @@ end
     @test Trixi.flux(SVector(1.0), gradients, 1, x, 0.0, equations) !=
           Trixi.flux(SVector(1.0), gradients, 1, x, 0.5, equations)
 
+    monotonic_diffusivity = (x, t) -> 0.1 * (1 + t)
+    equations_monotonic = TimeDependentDiffusionEquation1D(monotonic_diffusivity)
+    semi_monotonic = remake(semi; equations = equations_monotonic)
+    ode_monotonic = semidiscretize(semi_monotonic, tspan)
+    u_monotonic = Trixi.wrap_array(ode_monotonic.u0, semi_monotonic)
+    t_initial, t_final = tspan
+    dt_initial = Trixi.max_dt(u_monotonic, t_initial, mesh,
+                              have_constant_diffusivity(equations_monotonic),
+                              equations_monotonic, equations_monotonic, solver,
+                              semi_monotonic.cache)
+    dt_final = Trixi.max_dt(u_monotonic, t_final, mesh,
+                            have_constant_diffusivity(equations_monotonic),
+                            equations_monotonic, equations_monotonic, solver,
+                            semi_monotonic.cache)
+    @test dt_final < dt_initial
+    @test dt_final ≈ dt_initial / (1 + t_final)
+
     @test_allocations(Trixi.rhs_parabolic!, semi, sol, 1000)
 end
 
@@ -757,12 +774,12 @@ end
     @test_trixi_include(joinpath(EXAMPLES_DIR, "tree_1d_dgsem",
                                  "elixir_diffusion_time_dependent_coefficients.jl"),
                         initial_refinement_level=3,
-                        l2=[0.00011127453743513846],
-                        linf=[0.0006347950063912977])
+                        l2=[0.00011127464521867602],
+                        linf=[0.0006347956752195128])
     @test Trixi.SciMLBase.successful_retcode(sol.retcode)
     coarse_l2_error, coarse_linf_error = analysis_callback(sol)
-    @test all([6.984694161248236e-6] .< coarse_l2_error)
-    @test all([4.0670269742637544e-5] .< coarse_linf_error)
+    @test all([6.984694319086482e-6] .< coarse_l2_error)
+    @test all([4.066890902476583e-5] .< coarse_linf_error)
 end
 
 @testitem "Parabolic1D: TreeMesh1D: elixir_diffusion_ldg_newton_krylov.jl" setup=[
