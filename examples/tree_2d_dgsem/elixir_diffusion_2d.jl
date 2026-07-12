@@ -20,7 +20,7 @@ mesh = TreeMesh(coordinates_min, coordinates_max,
                 periodicity = true)
 
 function initial_condition_diffusion_2d(x, t, equations)
-    scalar = sin(x[1]) * sin(x[2]) * exp(-2 * max_diffusivity(equations) * t)
+    scalar = sin(x[1]) * sin(x[2]) * exp(-2 * diffusivity() * t)
     return SVector(scalar)
 end
 

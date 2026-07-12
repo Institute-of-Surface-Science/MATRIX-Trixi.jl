@@ -232,6 +232,9 @@ end
     @test_throws ArgumentError SpatiallyVaryingDiffusivity(coefficient_function, 0.0)
     @test_throws ArgumentError SpatiallyVaryingDiffusivity(coefficient_function, Inf)
     @test_throws ArgumentError SpatiallyVaryingDiffusivity(coefficient_function, NaN)
+    @test_throws MethodError LinearDiffusionEquation2D("invalid")
+    @test_throws MethodError LinearDiffusionEquation2D([0.1])
+    @test_throws MethodError LinearDiffusionEquation2D(identity)
 
     x_left = SVector(-0.5, 0.5)
     x_right = SVector(0.5, 0.5)
@@ -247,6 +250,7 @@ end
                           equations)
         @test flux_right[1] / flux_left[1] ≈ coefficient_right / coefficient_left
     end
+    @test_throws MethodError flux(SVector(1.0), gradients, 1, equations)
 
     time_coefficient = SpatiallyVaryingDiffusivity((x, t, equations) -> one(eltype(x)) +
                                                                         t,
@@ -261,6 +265,7 @@ end
     @test have_space_time_dependent_flux(equations_laplace) == Trixi.True()
     @test flux(SVector(1.0), gradients, 1, x_right, 0.0,
                equations_laplace) ≈ SVector(coefficient_right * gradients[1])
+    @test_throws MethodError flux(SVector(1.0), gradients, 1, equations_laplace)
 
     adapted = Trixi.trixi_adapt(Array, Float32, equations)
     @test adapted.diffusivity isa SpatiallyVaryingDiffusivity{<:Any, Float32}

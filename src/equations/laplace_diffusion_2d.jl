@@ -9,7 +9,8 @@ This is intended for use as the parabolic part of a hyperbolic-parabolic system,
 hyperbolic part is defined by `equations`. For a purely parabolic diffusion equation 
 without any hyperbolic part, see [`LinearDiffusionEquation2D`](@ref).
 """
-struct LaplaceDiffusion2D{E, N, T} <: AbstractLaplaceDiffusion{2, N}
+struct LaplaceDiffusion2D{E, N, T <: AbstractDiffusivityCoefficient} <:
+       AbstractLaplaceDiffusion{2, N}
     diffusivity::T
     equations_hyperbolic::E
 end
@@ -47,7 +48,9 @@ function varnames(variable_mapping, equations_parabolic::LaplaceDiffusion2D)
     return varnames(variable_mapping, equations_parabolic.equations_hyperbolic)
 end
 
-function flux(u, gradients, orientation::Integer, equations_parabolic::LaplaceDiffusion2D)
+function flux(u, gradients, orientation::Integer,
+              equations_parabolic::LaplaceDiffusion2D{<:Any, <:Any,
+                                                      <:ConstantDiffusivity})
     dudx, dudy = gradients
     diffusivity = diffusivity_value(equations_parabolic.diffusivity,
                                     equations_parabolic)

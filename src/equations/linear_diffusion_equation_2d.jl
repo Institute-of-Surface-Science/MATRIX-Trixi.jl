@@ -19,7 +19,8 @@ Unlike [`LaplaceDiffusion2D`](@ref), which represents the parabolic part of a
 hyperbolic-parabolic equation, `LinearDiffusionEquation2D` represents a purely parabolic
 equation without any hyperbolic part.
 """
-struct LinearDiffusionEquation2D{D} <: AbstractLaplaceDiffusion{2, 1}
+struct LinearDiffusionEquation2D{D <: AbstractDiffusivityCoefficient} <:
+       AbstractLaplaceDiffusion{2, 1}
     diffusivity::D
 end
 
@@ -55,7 +56,7 @@ varnames(::typeof(cons2entropy), ::LinearDiffusionEquation2D) = ("scalar",)
 @inline entropy(u, equations::LinearDiffusionEquation2D) = entropy(u[1], equations)
 
 @inline function flux(u, gradients, orientation::Integer,
-                      equations::LinearDiffusionEquation2D)
+                      equations::LinearDiffusionEquation2D{<:ConstantDiffusivity})
     dudx, dudy = gradients
     diffusivity = diffusivity_value(equations.diffusivity, equations)
     if orientation == 1

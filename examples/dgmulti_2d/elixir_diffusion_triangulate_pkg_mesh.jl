@@ -4,13 +4,13 @@ using Trixi
 ###############################################################################
 # Equation and analytical solution
 
-diffusivity = 5.0e-2
-equations = LinearDiffusionEquation2D(diffusivity)
+diffusivity() = 5.0e-2
+equations = LinearDiffusionEquation2D(diffusivity())
 
 # Exact solution of the diffusion equation on [-1, 1]^2 with fixed values at
 # y = +/-1 and insulating boundaries at x = +/-1.
 function initial_condition_diffusion(x, t, equations)
-    decay_rate = max_diffusivity(equations) * (pi / 2)^2
+    decay_rate = diffusivity() * (pi / 2)^2
     transient_part = exp(-decay_rate * t) * cospi(x[2] / 2)
     scalar = one(x[2]) + x[2] + transient_part
     return SVector(scalar)
