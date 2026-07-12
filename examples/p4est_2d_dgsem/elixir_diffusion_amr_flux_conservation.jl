@@ -63,13 +63,30 @@ semi = SemidiscretizationParabolic(mesh, equations, initial_condition, solver;
 ###############################################################################
 # ODE problem and adaptive mesh refinement
 
-tspan = (0.0, 0.02)
+tspan = (0.0, 0.5)
 ode = semidiscretize(semi, tspan)
 initial_mass = first(integrate(ode.u0, semi; normalize = false))
 
 summary_callback = SummaryCallback()
 analysis_interval = 50
-analysis_callback = AnalysisCallback(semi; interval = analysis_interval)
+normal_flux_x_neg = AnalysisSurfaceIntegral((:x_neg,),
+                                            NormalParabolicFlux(1;
+                                                                name = :flux_x_neg))
+normal_flux_x_pos = AnalysisSurfaceIntegral((:x_pos,),
+                                            NormalParabolicFlux(1;
+                                                                name = :flux_x_pos))
+normal_flux_y_neg = AnalysisSurfaceIntegral((:y_neg,),
+                                            NormalParabolicFlux(1;
+                                                                name = :flux_y_neg))
+normal_flux_y_pos = AnalysisSurfaceIntegral((:y_pos,),
+                                            NormalParabolicFlux(1;
+                                                                name = :flux_y_pos))
+analysis_callback = AnalysisCallback(semi;
+                                     interval = analysis_interval,
+                                     extra_analysis_integrals = (normal_flux_x_neg,
+                                                                 normal_flux_x_pos,
+                                                                 normal_flux_y_neg,
+                                                                 normal_flux_y_pos))
 alive_callback = AliveCallback(analysis_interval = analysis_interval)
 
 base_level = 0
@@ -89,7 +106,7 @@ amr_callback = AMRCallback(semi, amr_controller;
 
 # A small parabolic CFL is used so that several accepted steps and AMR decisions
 # occur during this short example.
-cfl_parabolic = 1.0e-3
+cfl_parabolic = 2.0e-2
 stepsize_callback = StepsizeCallback(; cfl_parabolic)
 
 callbacks = CallbackSet(summary_callback, analysis_callback, alive_callback,
@@ -117,18 +134,6 @@ mass_rate = first(integrate(du_final_ode, semi; normalize = false))
 
 u_final = Trixi.wrap_array(sol.u[end], semi)
 du_final = Trixi.wrap_array(du_final_ode, semi)
-normal_flux_x_neg = AnalysisSurfaceIntegral((:x_neg,),
-                                            NormalParabolicFlux(1;
-                                                                name = :flux_x_neg))
-normal_flux_x_pos = AnalysisSurfaceIntegral((:x_pos,),
-                                            NormalParabolicFlux(1;
-                                                                name = :flux_x_pos))
-normal_flux_y_neg = AnalysisSurfaceIntegral((:y_neg,),
-                                            NormalParabolicFlux(1;
-                                                                name = :flux_y_neg))
-normal_flux_y_pos = AnalysisSurfaceIntegral((:y_pos,),
-                                            NormalParabolicFlux(1;
-                                                                name = :flux_y_pos))
 
 boundary_fluxes = (;
                    x_neg = Trixi.analyze(normal_flux_x_neg, du_final, u_final,

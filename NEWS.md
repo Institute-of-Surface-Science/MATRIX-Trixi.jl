@@ -9,7 +9,7 @@ for human readability.
 
 #### Added
 - Added a pure scalar diffusion example with dynamic nonconforming `P4estMesh` AMR,
-  post-AMR boundary-flux analysis, and mass-conservation checks. Prescribed P4est
+  post-AMR boundary-flux analysis, and mass-conservation checks. Prescribed 2D P4est
   Neumann fluxes are now scaled by the physical surface Jacobian
   ([Institute-of-Surface-Science/MATRIX-Trixi.jl#10](https://github.com/Institute-of-Surface-Science/MATRIX-Trixi.jl/pull/10)).
 - Added a DGMulti pure-diffusion example on a Triangulate.jl mesh, including conversion

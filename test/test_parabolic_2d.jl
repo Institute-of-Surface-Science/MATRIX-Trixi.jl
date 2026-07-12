@@ -1319,9 +1319,10 @@ end
 ] tags=[:parabolic_part1] begin
     @test_trixi_include(joinpath(EXAMPLES_DIR, "p4est_2d_dgsem",
                                  "elixir_diffusion_amr_flux_conservation.jl"),
-                        l2=[0.04351558773343316],
-                        linf=[0.18817963262462944])
+                        l2=[0.022994760410297986],
+                        linf=[0.10346147528337513])
 
+    @test initial_ncells == 4
     @test final_ncells > initial_ncells
     @test final_nmortars > 0
     @test final_ncells < 500
