@@ -48,8 +48,9 @@ divergence discretization. For equations written as
 ```math
 \partial_t u = \nabla \cdot (D \nabla u),
 ```
-the conventional Fickian flux is obtained with `factor = -1`. The initial implementation
-supports purely parabolic one-dimensional [`TreeMesh`](@ref) semidiscretizations only.
+the conventional Fickian flux is obtained with `factor = -1`. The current implementation
+supports purely parabolic one-dimensional [`TreeMesh`](@ref) and two-dimensional
+[`P4estMesh`](@ref) semidiscretizations.
 
 - `component::Integer`: Index of the parabolic flux component
 - `factor`: Multiplicative factor applied to the outward normal flux

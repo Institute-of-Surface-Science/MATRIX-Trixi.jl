@@ -8,6 +8,10 @@ for human readability.
 ## Changes in the MATRIX-Trixi.jl fork
 
 #### Added
+- Added a pure scalar diffusion example with dynamic nonconforming `P4estMesh` AMR,
+  post-AMR boundary-flux analysis, and mass-conservation checks. Prescribed 2D P4est
+  Neumann fluxes are now scaled by the physical surface Jacobian
+  ([Institute-of-Surface-Science/MATRIX-Trixi.jl#10](https://github.com/Institute-of-Surface-Science/MATRIX-Trixi.jl/pull/10)).
 - Added a DGMulti pure-diffusion example on a Triangulate.jl mesh, including conversion
   of integer segment markers to symbolic Dirichlet and Neumann boundary names
   ([Institute-of-Surface-Science/MATRIX-Trixi.jl#9](https://github.com/Institute-of-Surface-Science/MATRIX-Trixi.jl/pull/9)).
