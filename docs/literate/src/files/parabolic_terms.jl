@@ -39,6 +39,13 @@ equations_hyperbolic = LinearScalarAdvectionEquation2D(advection_velocity);
 diffusivity = 5.0e-2
 equations_parabolic = LaplaceDiffusion2D(diffusivity, equations_hyperbolic);
 
+# Smooth scalar coefficients depending on coordinates or time can be supplied with
+# [`SpatiallyVaryingDiffusivity`](@ref). Its callback is evaluated as
+# `value_function(x, t, equations)`. The required upper bound is used for explicit
+# parabolic timestep estimates and must bound every value reached during the simulation.
+# Spatially varying coefficients are still linear in the solution, but currently disable
+# `linear_structure` because the constant-diffusivity trait also controls that optimization.
+
 # ## Boundary conditions
 
 # As with the equations, we define boundary conditions separately for the hyperbolic and

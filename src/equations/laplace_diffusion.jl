@@ -21,13 +21,13 @@ if the diffusion term is linear in the variables/constant.
     max_diffusivity(equations_parabolic::AbstractLaplaceDiffusion)
 
 # Returns
-- `equations_parabolic.diffusivity`
+- A global upper bound for the isotropic diffusion coefficient
 
-Returns isotropic diffusion coefficient for use in parabolic cfl condition computation,
-see [`StepsizeCallback`](@ref).
+Returns an isotropic diffusion coefficient bound for use in parabolic CFL condition
+computation, see [`StepsizeCallback`](@ref).
 """
 @inline function max_diffusivity(equations_parabolic::AbstractLaplaceDiffusion)
-    return equations_parabolic.diffusivity
+    return diffusivity_upper_bound(equations_parabolic.diffusivity)
 end
 
 @inline function penalty(u_outer, u_inner,
@@ -40,7 +40,7 @@ end
                          equations_parabolic::AbstractLaplaceDiffusion,
                          dg::ParabolicFormulationLocalDG)
     return dg.penalty_parameter .* (u_outer - u_inner) .*
-           equations_parabolic.diffusivity
+           diffusivity_value(equations_parabolic.diffusivity, equations_parabolic)
 end
 
 @inline function penalty(u_outer, u_inner, inv_h,
@@ -58,7 +58,7 @@ end
 
 @inline function penalty_diffusivity(u_outer, u_inner, x, t, ::True,
                                      equations_parabolic::AbstractLaplaceDiffusion)
-    return equations_parabolic.diffusivity
+    return diffusivity_value(equations_parabolic.diffusivity, equations_parabolic)
 end
 
 @inline function penalty_diffusivity(u_outer, u_inner, x, t, ::False,

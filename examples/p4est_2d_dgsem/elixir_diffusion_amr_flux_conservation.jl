@@ -25,8 +25,8 @@ const sine_power_coefficients = (35.0 / 128.0, -56.0 / 128.0, 28.0 / 128.0,
 end
 
 @inline function exact_solution(x, t, equations::LinearDiffusionEquation2D)
-    transient_x = diffused_sine_power(x[1], t, equations.diffusivity)
-    transient_y = diffused_sine_power(x[2], t, equations.diffusivity)
+    transient_x = diffused_sine_power(x[1], t, diffusivity())
+    transient_y = diffused_sine_power(x[2], t, diffusivity())
     return SVector(x[1] + amplitude() * transient_x * transient_y)
 end
 initial_condition = exact_solution
@@ -47,8 +47,8 @@ mesh = P4estMesh(trees_per_dimension;
                  periodicity = false)
 initial_ncells = Trixi.ncells(mesh)
 
-@inline flux_x_neg(x, t, equations) = SVector(-equations.diffusivity)
-@inline flux_x_pos(x, t, equations) = SVector(equations.diffusivity)
+@inline flux_x_neg(x, t, equations) = SVector(-diffusivity())
+@inline flux_x_pos(x, t, equations) = SVector(diffusivity())
 @inline flux_zero(x, t, equations) = SVector(zero(x[1]))
 
 boundary_conditions = (; x_neg = BoundaryConditionNeumann(flux_x_neg),
