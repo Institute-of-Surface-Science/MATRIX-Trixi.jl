@@ -97,6 +97,16 @@ ParabolicFormulationLocalDG() = ParabolicFormulationLocalDG(nothing)
     return abs(dg.penalty_parameter)
 end
 
+@inline function scale_boundary_flux(flux, surface_jacobian, operator_type,
+                                     boundary_condition, equations)
+    return flux
+end
+
+@inline function scale_boundary_flux(flux, surface_jacobian, ::Divergence,
+                                     ::BoundaryConditionNeumann, equations)
+    return flux * surface_jacobian
+end
+
 @doc raw"""
     flux_parabolic(u_ll, u_rr,
                    ::Gradient, equations_parabolic,

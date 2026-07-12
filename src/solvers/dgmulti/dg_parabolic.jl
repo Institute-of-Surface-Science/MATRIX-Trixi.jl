@@ -357,14 +357,6 @@ function calc_single_boundary_flux!(flux_face_values, u_face_values, t,
     return nothing
 end
 
-@inline scale_boundary_flux(flux, Jf, operator_type, boundary_condition, equations) = flux
-
-@inline function scale_boundary_flux(flux, Jf, ::Divergence,
-                                     ::BoundaryConditionNeumann,
-                                     equations)
-    return flux * Jf
-end
-
 @inline function calc_parabolic_fluxes!(flux_parabolic, u, gradients, t,
                                         mesh::DGMultiMesh,
                                         have_space_time_dependent_flux::False,

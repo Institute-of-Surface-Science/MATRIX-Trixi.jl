@@ -1313,6 +1313,33 @@ end
     @test_allocations(Trixi.rhs_parabolic!, semi, sol, 1000)
 end
 
+@testitem "Parabolic2D: P4estMesh2D: diffusion AMR flux conservation" setup=[
+    Setup,
+    Parabolic2D
+] tags=[:parabolic_part1] begin
+    @test_trixi_include(joinpath(EXAMPLES_DIR, "p4est_2d_dgsem",
+                                 "elixir_diffusion_amr_flux_conservation.jl"),
+                        l2=[0.04351558773343316],
+                        linf=[0.18817963262462944])
+
+    @test final_ncells > initial_ncells
+    @test final_nmortars > 0
+    @test final_ncells < 500
+
+    @test boundary_fluxes.x_neg≈expected_flux_x_neg atol=1.0e-11
+    @test boundary_fluxes.x_pos≈expected_flux_x_pos atol=1.0e-11
+    @test boundary_fluxes.y_neg≈expected_flux_y_neg atol=1.0e-11
+    @test boundary_fluxes.y_pos≈expected_flux_y_pos atol=1.0e-11
+    @test net_boundary_flux≈0.0 atol=1.0e-11
+
+    @test mass_rate≈net_boundary_flux atol=1.0e-10 rtol=1.0e-10
+    @test final_mass≈initial_mass atol=1.0e-10 rtol=1.0e-10
+
+    # Ensure that we do not have excessive memory allocations
+    # (e.g., from type instabilities)
+    @test_allocations(Trixi.rhs_parabolic!, semi, sol, 1000)
+end
+
 @testitem "Parabolic2D: P4estMesh2D: elixir_advection_diffusion_nonperiodic_amr.jl" setup=[
     Setup,
     Parabolic2D

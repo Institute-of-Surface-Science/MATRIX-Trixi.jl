@@ -1042,6 +1042,9 @@ function calc_boundary_flux!(cache, t,
             flux_ = boundary_condition_parabolic(flux_inner, u_inner, normal_direction,
                                                  x, t, operator_type,
                                                  equations_parabolic)
+            flux_ = scale_boundary_flux(flux_, norm(normal_direction), operator_type,
+                                        boundary_condition_parabolic,
+                                        equations_parabolic)
 
             # Copy flux to element storage in the correct orientation
             for v in eachvariable(equations_parabolic)
