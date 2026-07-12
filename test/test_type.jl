@@ -2106,6 +2106,17 @@ end
                                                           operator_divergence,
                                                           equations_parabolic)) == RealT
 
+        prescribed_normal_flux = SVector(one(RealT))
+        boundary_condition_neumann_oriented = BoundaryConditionNeumann((x, t, equations) -> prescribed_normal_flux)
+        @test @inferred(boundary_condition_neumann_oriented(flux_inner, u_inner, 1, 1,
+                                                            x, t, operator_divergence,
+                                                            equations_parabolic)) ==
+              -prescribed_normal_flux
+        @test @inferred(boundary_condition_neumann_oriented(flux_inner, u_inner, 1, 2,
+                                                            x, t, operator_divergence,
+                                                            equations_parabolic)) ==
+              prescribed_normal_flux
+
         adapted = @inferred Trixi.trixi_adapt(Array, Float32, equations_parabolic)
         @test adapted isa LaplaceDiffusion1D
         @test typeof(adapted.diffusivity) == Float32

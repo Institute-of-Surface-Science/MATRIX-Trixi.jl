@@ -8,6 +8,10 @@ for human readability.
 ## Changes in the MATRIX-Trixi.jl fork
 
 #### Added
+- Added `NormalParabolicFlux`, which can be used with `AnalysisSurfaceIntegral` and
+  `AnalysisCallback` to calculate the instantaneous normal parabolic flux through selected
+  boundaries of one-dimensional pure parabolic `TreeMesh` semidiscretizations
+  ([Institute-of-Surface-Science/MATRIX-Trixi.jl#7](https://github.com/Institute-of-Surface-Science/MATRIX-Trixi.jl/pull/7)).
 - Nonconstant parabolic timestep estimates may now depend on the solution, coordinates,
   and time through `max_diffusivity(u, x, t, equations)`, including support in
   `StepsizeCallback` for TreeMesh, P4est, and DGMulti discretizations

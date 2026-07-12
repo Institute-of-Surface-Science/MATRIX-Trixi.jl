@@ -718,6 +718,100 @@ end
     @test_allocations(Trixi.rhs_parabolic!, semi, sol, 1000)
 end
 
+@testitem "Parabolic1D: TreeMesh1D: elixir_diffusion_boundary_flux.jl" setup=[
+    Setup,
+    Parabolic1D
+] tags=[:parabolic_part1] begin
+    @test_trixi_include(joinpath(EXAMPLES_DIR, "tree_1d_dgsem",
+                                 "elixir_diffusion_boundary_flux.jl"),
+                        tspan=(0.0, 0.001))
+
+    t = sol.t[end]
+    u_ode = sol.u[end]
+    du_ode = similar(u_ode)
+    Trixi.rhs_parabolic!(du_ode, u_ode, semi, t)
+    u = Trixi.wrap_array(u_ode, semi)
+    du = Trixi.wrap_array(du_ode, semi)
+
+    flux_left = Trixi.analyze(normal_flux_left, du, u, t, semi)
+    flux_right = Trixi.analyze(normal_flux_right, du, u, t, semi)
+    flux_total = Trixi.analyze(normal_flux_total, du, u, t, semi)
+    physical_right = Trixi.analyze(fick_outflow_right, du, u, t, semi)
+
+    @test flux_left≈0.5 atol=1.0e-11 rtol=1.0e-11
+    @test flux_right≈-0.5 atol=1.0e-11 rtol=1.0e-11
+    @test flux_total≈0.0 atol=1.0e-11
+    @test physical_right≈0.5 atol=1.0e-11 rtol=1.0e-11
+
+    boundary_conditions_neumann = (;
+                                   x_neg = BoundaryConditionNeumann((x, t, equations) -> SVector(0.25)),
+                                   x_pos = BoundaryConditionNeumann((x, t, equations) -> SVector(-0.75)))
+    semi_neumann = remake(semi; boundary_conditions = boundary_conditions_neumann)
+    du_neumann_ode = similar(u_ode)
+    Trixi.rhs_parabolic!(du_neumann_ode, u_ode, semi_neumann, t)
+    u_neumann = Trixi.wrap_array(u_ode, semi_neumann)
+    du_neumann = Trixi.wrap_array(du_neumann_ode, semi_neumann)
+
+    neumann_flux_left = Trixi.analyze(normal_flux_left, du_neumann, u_neumann, t,
+                                      semi_neumann)
+    neumann_flux_right = Trixi.analyze(normal_flux_right, du_neumann, u_neumann, t,
+                                       semi_neumann)
+    neumann_flux_total = neumann_flux_left + neumann_flux_right
+    integrated_rhs = Trixi.integrate(du_neumann_ode, semi_neumann; normalize = false)
+
+    @test neumann_flux_left≈0.25 atol=1.0e-11 rtol=1.0e-11
+    @test neumann_flux_right≈-0.75 atol=1.0e-11 rtol=1.0e-11
+    @test neumann_flux_total≈-0.5 atol=1.0e-11 rtol=1.0e-11
+    @test integrated_rhs[1]≈neumann_flux_total atol=1.0e-11 rtol=1.0e-11
+
+    invalid_component = AnalysisSurfaceIntegral((:x_pos,), NormalParabolicFlux(2))
+    @test_throws ArgumentError Trixi.analyze(invalid_component, du, u, t, semi)
+    invalid_boundary = AnalysisSurfaceIntegral((:not_a_boundary,), NormalParabolicFlux())
+    @test_throws ArgumentError Trixi.analyze(invalid_boundary, du, u, t, semi)
+
+    @test Trixi.pretty_form_ascii(normal_flux_left) == "normal_flux_left"
+    @test Trixi.pretty_form_utf(fick_outflow_right) == "fick_outflow_right"
+    @test NormalParabolicFlux(Int32(1)) isa NormalParabolicFlux{1}
+    @test NormalParabolicFlux(big(1)) isa NormalParabolicFlux{1}
+    @test_throws ArgumentError NormalParabolicFlux(0)
+end
+
+@testitem "Parabolic1D: TreeMesh diffusion boundary flux with Gauss nodes" setup=[
+    Setup,
+    Parabolic1D
+] tags=[:parabolic_part1] begin
+    @test_trixi_include(joinpath(EXAMPLES_DIR, "tree_1d_dgsem",
+                                 "elixir_diffusion_boundary_flux.jl"),
+                        solver=DGSEM(polydeg = 3, basis_type = GaussLegendreBasis),
+                        tspan=(0.0, 0.001))
+
+    t = sol.t[end]
+    du_ode = similar(sol.u[end])
+    Trixi.rhs_parabolic!(du_ode, sol.u[end], semi, t)
+    u = Trixi.wrap_array(sol.u[end], semi)
+    du = Trixi.wrap_array(du_ode, semi)
+    @test Trixi.analyze(normal_flux_left, du, u, t, semi)≈0.5 atol=1.0e-10 rtol=1.0e-10
+    @test Trixi.analyze(normal_flux_right, du, u, t, semi)≈-0.5 atol=1.0e-10 rtol=1.0e-10
+end
+
+@testitem "Parabolic1D: TreeMesh diffusion boundary flux with BR1" setup=[
+    Setup,
+    Parabolic1D
+] tags=[:parabolic_part1] begin
+    @test_trixi_include(joinpath(EXAMPLES_DIR, "tree_1d_dgsem",
+                                 "elixir_diffusion_boundary_flux.jl"),
+                        solver_parabolic=ParabolicFormulationBassiRebay1(),
+                        tspan=(0.0, 0.001))
+
+    t = sol.t[end]
+    du_ode = similar(sol.u[end])
+    Trixi.rhs_parabolic!(du_ode, sol.u[end], semi, t)
+    u = Trixi.wrap_array(sol.u[end], semi)
+    du = Trixi.wrap_array(du_ode, semi)
+    @test Trixi.analyze(normal_flux_left, du, u, t, semi)≈0.5 atol=1.0e-11 rtol=1.0e-11
+    @test Trixi.analyze(normal_flux_right, du, u, t, semi)≈-0.5 atol=1.0e-11 rtol=1.0e-11
+end
+
 @testitem "Parabolic1D: TreeMesh1D: elixir_diffusion_time_dependent_coefficients.jl" setup=[
     Setup,
     Parabolic1D

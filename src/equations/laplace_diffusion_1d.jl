@@ -101,7 +101,11 @@ end
                                                                 x, t,
                                                                 operator_type::Divergence,
                                                                 equations_parabolic::AbstractLaplaceDiffusion)
-    return boundary_condition.boundary_normal_flux_function(x, t, equations_parabolic)
+    normal_flux = boundary_condition.boundary_normal_flux_function(x, t,
+                                                                   equations_parabolic)
+    # The TreeMesh surface cache stores fluxes in the positive coordinate direction,
+    # whereas BoundaryConditionNeumann prescribes the outward normal flux.
+    return isodd(direction) ? -normal_flux : normal_flux
 end
 
 # Required for the 1D (TreeMesh) case
