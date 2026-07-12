@@ -219,6 +219,19 @@ end
     Setup,
     Parabolic2D
 ] tags=[:parabolic_part1] begin
+    struct CustomConstantDiffusivity{T} <: AbstractDiffusivityCoefficient
+        value::T
+    end
+
+    Trixi.have_constant_diffusivity(::CustomConstantDiffusivity) = Trixi.True()
+    Trixi.have_space_time_dependent_flux(::CustomConstantDiffusivity) = Trixi.False()
+    Trixi.diffusivity_value(coefficient::CustomConstantDiffusivity, equations) = coefficient.value
+    Trixi.diffusivity_upper_bound(coefficient::CustomConstantDiffusivity) = coefficient.value
+    function Base.similar(coefficient::CustomConstantDiffusivity,
+                          ::Type{NewRealT}) where {NewRealT}
+        return CustomConstantDiffusivity(convert(NewRealT, coefficient.value))
+    end
+
     struct CustomSpaceTimeDiffusivity <: AbstractDiffusivityCoefficient end
 
     Trixi.have_constant_diffusivity(::CustomSpaceTimeDiffusivity) = Trixi.False()
@@ -245,6 +258,10 @@ end
     @test_throws MethodError LinearDiffusionEquation2D([0.1])
     @test_throws MethodError LinearDiffusionEquation2D(identity)
 
+    custom_constant_equations = LinearDiffusionEquation2D(CustomConstantDiffusivity(0.2))
+    @test have_constant_diffusivity(custom_constant_equations) == Trixi.True()
+    @test have_space_time_dependent_flux(custom_constant_equations) == Trixi.False()
+
     custom_equations = LinearDiffusionEquation2D(CustomSpaceTimeDiffusivity())
     @test have_constant_diffusivity(custom_equations) == Trixi.False()
     @test have_space_time_dependent_flux(custom_equations) == Trixi.True()
@@ -254,6 +271,14 @@ end
     x_left = SVector(-0.5, 0.5)
     x_right = SVector(0.5, 0.5)
     gradients = (SVector(2.0), SVector(-3.0))
+    @test flux(SVector(1.0), gradients, 1,
+               custom_constant_equations) == SVector(0.4)
+    @test flux(SVector(1.0), gradients, 1, x_left, 0.5,
+               custom_constant_equations) == SVector(0.4)
+    adapted_custom_constant = Trixi.trixi_adapt(Array, Float32,
+                                                custom_constant_equations)
+    @test adapted_custom_constant.diffusivity isa CustomConstantDiffusivity{Float32}
+    @test adapted_custom_constant.diffusivity.value == 0.2f0
     @test flux(SVector(1.0), gradients, 1, x_left, 0.5,
                custom_equations) == SVector(3.0)
     coefficient_left = coefficient_function(x_left, 0.0, equations)
@@ -283,6 +308,11 @@ end
     @test have_space_time_dependent_flux(custom_equations_laplace) == Trixi.True()
     @test flux(SVector(1.0), gradients, 2, x_left, 0.5,
                custom_equations_laplace) == SVector(-4.5)
+
+    custom_constant_equations_laplace = LaplaceDiffusion2D(CustomConstantDiffusivity(0.2),
+                                                           equations_hyperbolic)
+    @test flux(SVector(1.0), gradients, 2, x_left, 0.5,
+               custom_constant_equations_laplace) ≈ SVector(-0.6)
 
     equations_laplace = LaplaceDiffusion2D(coefficient, equations_hyperbolic)
     @test have_constant_diffusivity(equations_laplace) == Trixi.False()

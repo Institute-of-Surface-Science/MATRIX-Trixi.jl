@@ -84,6 +84,17 @@ end
 
 @inline function flux(u, gradients, orientation::Integer, x, t,
                       equations::LinearDiffusionEquation2D)
+    return flux(u, gradients, orientation, x, t,
+                have_space_time_dependent_flux(equations), equations)
+end
+
+@inline function flux(u, gradients, orientation::Integer, x, t, ::False,
+                      equations::LinearDiffusionEquation2D)
+    return flux(u, gradients, orientation, equations)
+end
+
+@inline function flux(u, gradients, orientation::Integer, x, t, ::True,
+                      equations::LinearDiffusionEquation2D)
     diffusivity = diffusivity_value(equations.diffusivity, x, t, equations)
     return SVector(diffusivity * gradients[orientation])
 end

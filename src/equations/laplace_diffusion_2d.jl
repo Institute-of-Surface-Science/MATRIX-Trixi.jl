@@ -78,6 +78,18 @@ end
 
 @inline function flux(u, gradients, orientation::Integer, x, t,
                       equations_parabolic::LaplaceDiffusion2D)
+    return flux(u, gradients, orientation, x, t,
+                have_space_time_dependent_flux(equations_parabolic),
+                equations_parabolic)
+end
+
+@inline function flux(u, gradients, orientation::Integer, x, t, ::False,
+                      equations_parabolic::LaplaceDiffusion2D)
+    return flux(u, gradients, orientation, equations_parabolic)
+end
+
+@inline function flux(u, gradients, orientation::Integer, x, t, ::True,
+                      equations_parabolic::LaplaceDiffusion2D)
     diffusivity = diffusivity_value(equations_parabolic.diffusivity, x, t,
                                     equations_parabolic)
     return SVector(diffusivity * gradients[orientation])

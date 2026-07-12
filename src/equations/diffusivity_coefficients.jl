@@ -3,9 +3,17 @@
 
 Abstract type for scalar isotropic diffusivity coefficient providers.
 
-Subtypes must implement `have_constant_diffusivity`,
-`have_space_time_dependent_flux`, `diffusivity_value`, `diffusivity_upper_bound`,
-and `Base.similar`.
+Subtypes must implement the following interface methods:
+
+- `have_constant_diffusivity(coefficient)`, returning `True()` or `False()`;
+- `have_space_time_dependent_flux(coefficient)`, returning `True()` or `False()`;
+- `diffusivity_upper_bound(coefficient)`, returning a global scalar upper bound;
+- `Base.similar(coefficient, NewRealT)`, adapting stored real values to `NewRealT`.
+
+Constant providers, for which `have_space_time_dependent_flux` returns `False()`, must
+implement `diffusivity_value(coefficient, equations)`. Space- or time-dependent providers,
+for which it returns `True()`, must instead implement
+`diffusivity_value(coefficient, x, t, equations)`.
 """
 abstract type AbstractDiffusivityCoefficient end
 
