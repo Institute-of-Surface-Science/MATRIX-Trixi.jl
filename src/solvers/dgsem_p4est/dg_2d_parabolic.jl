@@ -48,7 +48,8 @@ function rhs_parabolic!(du, u, t, mesh::Union{P4estMesh{2}, P4estMesh{3}},
 
     # Compute and store the parabolic fluxes
     @trixi_timeit timer() "calculate parabolic fluxes" begin
-        calc_parabolic_fluxes!(flux_parabolic, gradients, u_transformed, mesh,
+        calc_parabolic_fluxes!(flux_parabolic, gradients, u_transformed, t, mesh,
+                               have_space_time_dependent_flux(equations_parabolic),
                                equations_parabolic, dg, cache)
     end
 

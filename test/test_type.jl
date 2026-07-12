@@ -2202,6 +2202,12 @@ end
         equations_1d = LinearDiffusionEquation1D(RealT(0.1))
         @test eltype(@inferred cons2prim(u, equations_1d)) == RealT
         @test eltype(@inferred cons2entropy(u, equations_1d)) == RealT
+        @test have_space_time_dependent_flux(equations_1d) == Trixi.False()
+        gradients_1d = (SVector(one(RealT)),)
+        x = SVector(zero(RealT))
+        t = zero(RealT)
+        @test @inferred(flux(u, gradients_1d, 1, x, t, equations_1d)) ==
+              @inferred(flux(u, gradients_1d, 1, equations_1d))
 
         equations_2d = LinearDiffusionEquation2D(RealT(0.1))
         @test eltype(@inferred cons2prim(u, equations_2d)) == RealT

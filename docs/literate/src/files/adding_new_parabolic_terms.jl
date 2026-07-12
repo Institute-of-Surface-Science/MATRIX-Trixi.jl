@@ -58,6 +58,32 @@ function Trixi.flux(u, gradients, orientation::Integer,
     end
 end
 
+# ## Space- and time-dependent parabolic fluxes
+#
+# The shorter flux signature above is sufficient for autonomous, spatially homogeneous
+# diffusion. Parabolic equations whose coefficients depend on coordinates or time can instead
+# implement
+# ```julia
+# flux(u, gradients, orientation, x, t, equations_parabolic)
+# ```
+# where `x` is the coordinate of the volume node or quadrature point at which `u` and
+# `gradients` were evaluated. For example, a scalar diffusion coefficient ``D(x,t)`` should
+# be evaluated using these supplied `x` and `t` arguments inside the flux method. Such an
+# equation must opt into the extended solver kernel with
+# ```julia
+# Trixi.have_space_time_dependent_flux(::MyParabolicEquations) = Trixi.True()
+# ```
+#
+# Existing equations implementing only
+# `flux(u, gradients, orientation, equations_parabolic)` use the default trait value `False()`
+# and therefore retain the original solver kernel and numerical results. The extended flux API
+# also provides a fallback that ignores `x` and `t` and calls this shorter method. Source terms
+# already receive coordinates and time through
+# `source_terms(u, gradients, x, t, equations_parabolic)`. Time-dependent coefficients in both
+# fluxes and source terms must be calculated from the supplied `t`; updating mutable coefficient
+# state only in accepted-step callbacks would give incorrect values at intermediate integrator
+# stages.
+
 # ## Defining boundary conditions
 
 # Trixi.jl's implementation of parabolic terms discretizes both the gradient and divergence
