@@ -8,6 +8,10 @@ for human readability.
 ## Changes in the MATRIX-Trixi.jl fork
 
 #### Added
+- Added `SpatiallyVaryingDiffusivity` for prescribed scalar isotropic diffusion
+  coefficients depending on coordinates and time, together with a manufactured 2D
+  convergence example
+  ([Institute-of-Surface-Science/MATRIX-Trixi.jl#11](https://github.com/Institute-of-Surface-Science/MATRIX-Trixi.jl/pull/11)).
 - Added a pure scalar diffusion example with dynamic nonconforming `P4estMesh` AMR,
   post-AMR boundary-flux analysis, and mass-conservation checks. Prescribed 2D P4est
   Neumann fluxes are now scaled by the physical surface Jacobian
