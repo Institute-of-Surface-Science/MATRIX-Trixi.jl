@@ -220,7 +220,6 @@ end
     Parabolic2D
 ] tags=[:parabolic_part1] begin
     using OrdinaryDiffEqLowStorageRK
-    using Random
 
     struct VariablePenaltyDiffusion2D{F} <: Trixi.AbstractLaplaceDiffusion{2, 1}
         diffusivity::F
@@ -270,9 +269,7 @@ end
                                            solver_parabolic = ParabolicFormulationLocalDG(1.0),
                                            boundary_conditions = boundary_condition_periodic)
     ode_tri = semidiscretize(semi_tri, (0.0, 0.01))
-    u_tri = similar(ode_tri.u0)
-    Random.seed!(1234)
-    rand!(Trixi.StructArrays.components(parent(u_tri))[1])
+    u_tri = copy(ode_tri.u0)
     du_tri = similar(u_tri)
     Trixi.rhs_parabolic!(du_tri, u_tri, semi_tri, 0.0)
     integrated_rhs_tri = Trixi.integrate(du_tri, semi_tri; normalize = false)

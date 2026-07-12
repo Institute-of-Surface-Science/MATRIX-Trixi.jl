@@ -34,14 +34,15 @@ not need to be specialized for `Gradient` and `Divergence`.
 
 `normal_direction` is not used in the BR1 flux,
 but is included as an argument for consistency with the [`ParabolicFormulationLocalDG`](@ref) flux,
-which does use the `normal_direction` to compute the LDG "switch" on the generally non-Cartesian [`P4estMesh`](@ref).
+which uses it to compute the LDG "switch" on meshes with arbitrary face normals, such as
+[`P4estMesh`](@ref) and [`DGMultiMesh`](@ref).
 """
 function flux_parabolic(u_ll, u_rr, # Version for `TreeMesh`
                         gradient_or_divergence, equations_parabolic,
                         parabolic_scheme::ParabolicFormulationBassiRebay1)
     return 0.5f0 * (u_ll + u_rr)
 end
-# Version for `P4estMesh`
+# Version for meshes with arbitrary face normals
 function flux_parabolic(u_ll, u_rr, normal_direction::AbstractVector,
                         gradient_or_divergence, equations_parabolic,
                         parabolic_scheme::ParabolicFormulationBassiRebay1)
@@ -115,7 +116,8 @@ f_{\text{gradient}} = u_{L}
 ```
 on the Cartesian [`TreeMesh`](@ref).
 
-For the [`P4estMesh`](@ref), the `normal_direction` is used to compute the LDG "switch" ``\sigma`` for the upwinding.
+For [`P4estMesh`](@ref) and [`DGMultiMesh`](@ref), `normal_direction` is used to compute
+the LDG "switch" ``\sigma`` for the upwinding.
 This is realized by selecting the sign of the maximum (in absolute value sense) normal direction component,
 which corresponds to the "dominant" direction of the interface normal.
 ```math
@@ -133,7 +135,7 @@ function flux_parabolic(u_ll, u_rr, # Version for `TreeMesh`
     # and `u_rr` for the divergence. 
     return u_ll # Use the upwind value for the gradient interface flux
 end
-# Version for `P4estMesh`
+# Version for meshes with arbitrary face normals
 function flux_parabolic(u_ll, u_rr, normal_direction,
                         ::Gradient, equations_parabolic,
                         parabolic_scheme::ParabolicFormulationLocalDG)
@@ -163,7 +165,8 @@ f_{\text{divergence}} = u_{R}
 ```
 on the Cartesian [`TreeMesh`](@ref).
 
-For the [`P4estMesh`](@ref), the `normal_direction` is used to compute the LDG "switch" ``\sigma`` for the downwinding.
+For [`P4estMesh`](@ref) and [`DGMultiMesh`](@ref), `normal_direction` is used to compute
+the LDG "switch" ``\sigma`` for the downwinding.
 This is realized by selecting the sign of the maximum (in absolute value sense) normal direction component,
 which corresponds to the "dominant" direction of the interface normal.
 ```math
@@ -176,7 +179,7 @@ function flux_parabolic(u_ll, u_rr, # Version for `TreeMesh`
                         parabolic_scheme::ParabolicFormulationLocalDG)
     return u_rr # Use the downwind value for the divergence interface flux
 end
-# Version for `P4estMesh`
+# Version for meshes with arbitrary face normals
 function flux_parabolic(u_ll, u_rr, normal_direction,
                         ::Divergence, equations_parabolic,
                         parabolic_scheme::ParabolicFormulationLocalDG)
