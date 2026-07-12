@@ -35,15 +35,15 @@ function LaplaceDiffusionComponentwise{NDIMS}(diffusivity,
 end
 
 function LaplaceDiffusionComponentwise1D(diffusivity, equations_hyperbolic)
-    LaplaceDiffusionComponentwise{1}(diffusivity, equations_hyperbolic)
+    return LaplaceDiffusionComponentwise{1}(diffusivity, equations_hyperbolic)
 end
 
 function LaplaceDiffusionComponentwise2D(diffusivity, equations_hyperbolic)
-    LaplaceDiffusionComponentwise{2}(diffusivity, equations_hyperbolic)
+    return LaplaceDiffusionComponentwise{2}(diffusivity, equations_hyperbolic)
 end
 
 function LaplaceDiffusionComponentwise3D(diffusivity, equations_hyperbolic)
-    LaplaceDiffusionComponentwise{3}(diffusivity, equations_hyperbolic)
+    return LaplaceDiffusionComponentwise{3}(diffusivity, equations_hyperbolic)
 end
 
 # Together with our specialization of `Adapt.adapt_structure`,
@@ -65,8 +65,6 @@ function varnames(variable_mapping,
                   equations_parabolic::LaplaceDiffusionComponentwise)
     return varnames(variable_mapping, equations_parabolic.equations_hyperbolic)
 end
-
-@inline have_constant_diffusivity(::LaplaceDiffusionComponentwise) = True()
 
 @inline function max_diffusivity(equations_parabolic::LaplaceDiffusionComponentwise)
     return maximum(abs, equations_parabolic.diffusivity)
