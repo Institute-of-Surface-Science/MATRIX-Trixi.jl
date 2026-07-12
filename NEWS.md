@@ -8,6 +8,10 @@ for human readability.
 ## Changes in the MATRIX-Trixi.jl fork
 
 #### Added
+- Added a complete local discontinuous Galerkin (LDG) parabolic formulation for
+  `DGMultiMesh`, including physical-boundary validation, boundary traces,
+  metric-scaled penalties, and penalty-aware timestep estimates
+  ([Institute-of-Surface-Science/MATRIX-Trixi.jl#8](https://github.com/Institute-of-Surface-Science/MATRIX-Trixi.jl/pull/8)).
 - Added `NormalParabolicFlux`, which can be used with `AnalysisSurfaceIntegral` and
   `AnalysisCallback` to calculate the instantaneous normal parabolic flux through selected
   boundaries of one-dimensional pure parabolic `TreeMesh` semidiscretizations

@@ -173,7 +173,7 @@ function calculate_dt(u_ode, t, cfl_hyperbolic, cfl_parabolic,
 
     return cfl_para * max_dt(u, t, mesh,
                   have_constant_diffusivity(equations), equations,
-                  equations, solver, cache)
+                  equations, solver, semi.solver_parabolic, cache)
 end
 
 # Case for a hyperbolic-parabolic semidiscretization
@@ -194,12 +194,18 @@ function calculate_dt(u_ode, t, cfl_hyperbolic, cfl_parabolic,
     if cfl_para > 0 # Check if parabolic CFL should be considered
         dt_parabolic = cfl_para * max_dt(u, t, mesh,
                               have_constant_diffusivity(equations_parabolic), equations,
-                              equations_parabolic, solver, cache)
+                              equations_parabolic, solver, semi.solver_parabolic, cache)
 
         return min(dt_hyperbolic, dt_parabolic)
     else
         return dt_hyperbolic
     end
+end
+
+@inline function max_dt(u, t, mesh, constant_diffusivity, equations,
+                        equations_parabolic, dg, parabolic_scheme, cache)
+    return max_dt(u, t, mesh, constant_diffusivity, equations,
+                  equations_parabolic, dg, cache)
 end
 
 function calc_max_scaled_speed(backend::Nothing, u, mesh, constant_speed, equations, dg,

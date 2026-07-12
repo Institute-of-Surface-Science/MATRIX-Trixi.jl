@@ -328,6 +328,15 @@ function max_dt(u, t, mesh::DGMultiMesh,
                 equations_parabolic::AbstractEquationsParabolic,
                 dg::DGMulti{NDIMS},
                 cache) where {NDIMS}
+    return max_dt(u, t, mesh, constant_diffusivity, equations,
+                  equations_parabolic, dg, default_parabolic_solver(), cache)
+end
+
+function max_dt(u, t, mesh::DGMultiMesh,
+                constant_diffusivity::False, equations,
+                equations_parabolic::AbstractEquationsParabolic,
+                dg::DGMulti{NDIMS}, parabolic_scheme,
+                cache) where {NDIMS}
     @unpack md = mesh
     rd = dg.basis
     (; u_values) = cache.solution_container
@@ -343,12 +352,14 @@ function max_dt(u, t, mesh::DGMultiMesh,
         max_speeds = max_abs_speeds_per_element(u, t, constant_speed, equations,
                                                 dg, e)
         for i in Base.OneTo(rd.Nq)
-            # estimate diffusive "wavespeed" as diffusivity / h
-            # this corresponds to a CFL of h^2 * diffusivity
+            # The base diffusive "wavespeed" is diffusivity / h, giving a
+            # timestep proportional to h^2 / diffusivity without penalization.
             x_i = SVector(getindex.(md.xyzq, i, e))
             diffusivity = max_diffusivity(u_values[i, e], x_i, t,
                                           equations_parabolic)
-            max_speeds = max.(max_speeds, diffusivity / h_e)
+            diffusion_speed = diffusivity * inv(h_e) *
+                              (1 + parabolic_penalty_coefficient(parabolic_scheme))
+            max_speeds = max.(max_speeds, diffusion_speed)
         end
         dt_min = min(dt_min, h_e / sum(max_speeds))
     end
@@ -364,11 +375,20 @@ function max_dt(u, t, mesh::DGMultiMesh,
                 equations_parabolic::AbstractEquationsParabolic,
                 dg::DGMulti{NDIMS},
                 cache) where {NDIMS}
+    return max_dt(u, t, mesh, constant_diffusivity, equations,
+                  equations_parabolic, dg, default_parabolic_solver(), cache)
+end
+
+function max_dt(u, t, mesh::DGMultiMesh,
+                constant_diffusivity::True, equations,
+                equations_parabolic::AbstractEquationsParabolic,
+                dg::DGMulti{NDIMS}, parabolic_scheme,
+                cache) where {NDIMS}
     @unpack md = mesh
     rd = dg.basis
 
-    # estimate diffusive "wavespeed" as diffusivity / h
-    # this corresponds to a CFL of h^2 * diffusivity
+    # The base diffusive "wavespeed" is diffusivity / h, giving a timestep
+    # proportional to h^2 / diffusivity without penalization.
     diffusivity = max_diffusivity(equations_parabolic)
     constant_speed = have_constant_speed(equations)
 
@@ -377,7 +397,9 @@ function max_dt(u, t, mesh::DGMultiMesh,
         h_e = StartUpDG.estimate_h(e, rd, md)
         max_speeds = max_abs_speeds_per_element(u, t, constant_speed, equations,
                                                 dg, e)
-        max_speeds = max.(max_speeds, diffusivity / h_e)
+        diffusion_speed = diffusivity * inv(h_e) *
+                          (1 + parabolic_penalty_coefficient(parabolic_scheme))
+        max_speeds = max.(max_speeds, diffusion_speed)
         dt_min = min(dt_min, h_e / sum(max_speeds))
     end
     # This mimics `max_dt` for `TreeMesh`, except that `nnodes(dg)` is replaced by
