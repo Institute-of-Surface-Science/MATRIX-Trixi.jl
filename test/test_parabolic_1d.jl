@@ -606,6 +606,62 @@ end
     @test_allocations(Trixi.rhs_parabolic!, semi, sol, 1000)
 end
 
+@testitem "Parabolic1D: TreeMesh1D: elixir_laplace_diffusion_componentwise.jl" setup=[
+    Setup,
+    Parabolic1D
+] tags=[:parabolic_part1] begin
+    @test_trixi_include(joinpath(EXAMPLES_DIR, "tree_1d_dgsem",
+                                 "elixir_laplace_diffusion_componentwise.jl"),
+                        l2=[3.15152149243869e-15, 3.4751577256217856e-16,
+                            4.387506658169924e-15, 1.0219956109529742e-5,
+                            0.00011135716421812636],
+                        linf=[3.219646771412954e-15, 5.003097405398211e-16,
+                            4.884981308350689e-15, 5.97916749279781e-5,
+                            0.0002426087236215846])
+    @test Trixi.SciMLBase.successful_retcode(sol.retcode)
+
+    u_initial = Trixi.wrap_array(sol.u[1], semi)
+    u_final = Trixi.wrap_array(sol.u[end], semi)
+    for variable in (1, 2, 3, 5)
+        @test maximum(abs,
+                      @view(u_final[variable, :, :]) .-
+                      @view(u_initial[variable, :, :])) < 1.0e-13
+    end
+
+    @test_allocations(Trixi.rhs!, semi, sol, 1000)
+    @test_allocations(Trixi.rhs_parabolic!, semi, sol, 1000)
+end
+
+@testitem "Parabolic1D: DGMulti componentwise diffusion RHS" setup=[
+    Setup,
+    Parabolic1D
+] tags=[:parabolic_part1] begin
+    dg = DGMulti(polydeg = 2, element_type = Line(), approximation_type = Polynomial(),
+                 surface_integral = SurfaceIntegralWeakForm(flux_central))
+    mesh = DGMultiMesh(dg, (2,), coordinates_min = (0.0,), coordinates_max = (2.0,),
+                       periodicity = true)
+    equations = CompressibleEulerEquations1D(1.4)
+    equations_parabolic = LaplaceDiffusionComponentwise1D((0.1, 0.0, 0.0), equations)
+    initial_condition = function (x, t, equations)
+        return SVector(1 + 0.1 * sinpi(x[1]), zero(x[1]),
+                       one(x[1]) / (equations.gamma - 1))
+    end
+
+    semi = SemidiscretizationHyperbolicParabolic(mesh, (equations, equations_parabolic),
+                                                 initial_condition, dg;
+                                                 boundary_conditions = (boundary_condition_periodic,
+                                                                        boundary_condition_periodic))
+    ode = semidiscretize(semi, (0.0, 0.01))
+    du = similar(ode.u0)
+    @test_nowarn Trixi.rhs_parabolic!(du, ode.u0, semi, 0.0)
+
+    du_fields = Base.parent(du)
+    @test maximum(abs, getindex.(du_fields, 1)) > 1.0e-8
+    for variable in 2:nvariables(equations)
+        @test iszero(maximum(abs, getindex.(du_fields, variable)))
+    end
+end
+
 @testitem "Parabolic1D: TreeMesh1D: elixir_diffusion_ldg.jl" setup=[Setup, Parabolic1D] tags=[:parabolic_part1] begin
     @test_trixi_include(joinpath(EXAMPLES_DIR, "tree_1d_dgsem",
                                  "elixir_diffusion_ldg.jl"),

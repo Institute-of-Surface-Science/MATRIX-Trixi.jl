@@ -229,6 +229,8 @@ export IdealGas, ThermallyPerfectGas9PolyFit,
 
 export LinearDiffusionEquation1D, LinearDiffusionEquation2D, LinearDiffusionEquation3D,
        LaplaceDiffusion1D, LaplaceDiffusion2D, LaplaceDiffusion3D,
+       LaplaceDiffusionComponentwise, LaplaceDiffusionComponentwise1D,
+       LaplaceDiffusionComponentwise2D, LaplaceDiffusionComponentwise3D,
        LaplaceDiffusionEntropyVariables1D, LaplaceDiffusionEntropyVariables2D,
        LaplaceDiffusionEntropyVariables3D,
        CompressibleNavierStokesDiffusion1D, CompressibleNavierStokesDiffusion2D,
