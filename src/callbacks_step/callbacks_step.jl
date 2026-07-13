@@ -50,6 +50,8 @@ end
 # * `SummaryCallback` controls, among other things, timers and should thus be first
 # * `SteadyStateCallback` may mark a time step as the last step, which is needed by other callbacks
 # * `AnalysisCallback` may also do some checks that mark a step as the last one
+# * `VariableBoundsCallback` may terminate at a bound violation; later callbacks can then save
+#    the terminal state
 # * `AliveCallback` belongs to `AnalysisCallback` and should thus be nearby
 # * `SaveRestartCallback`, `SaveSolutionCallback`, and `TimeSeriesCallback` should save the current
 #    solution state before it is potentially degraded by AMR
@@ -66,6 +68,7 @@ end
 include("summary.jl")
 include("steady_state.jl")
 include("analysis.jl")
+include("variable_bounds.jl")
 include("alive.jl")
 include("save_restart.jl")
 include("save_solution.jl")

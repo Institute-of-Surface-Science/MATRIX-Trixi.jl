@@ -1305,6 +1305,61 @@ end
                                      callback = StepsizeCallback(cfl = 1.0))
 end
 
+@testitem "Unit: VariableBoundsCallback dimensional DGSEM kernels" setup=[
+    Setup,
+    UnitTests
+] tags=[:misc_part1] begin
+    using Trixi: Trixi, CompressibleEulerEquations1D, DGSEM,
+                 LinearScalarAdvectionEquation1D, LinearScalarAdvectionEquation2D,
+                 LinearScalarAdvectionEquation3D, SemidiscretizationHyperbolic,
+                 SVector, TreeMesh, VariableBound, boundary_condition_periodic,
+                 isviolated
+
+    dimension_cases = ((LinearScalarAdvectionEquation1D(1.0), -1.0, 1.0, -1.0, 1.0),
+                       (LinearScalarAdvectionEquation2D(1.0, 1.0), (-1.0, -1.0), (1.0, 1.0),
+                        -2.0, 2.0),
+                       (LinearScalarAdvectionEquation3D(1.0, 1.0, 1.0),
+                        (-1.0, -1.0, -1.0), (1.0, 1.0, 1.0), -3.0, 3.0))
+    for dimension_case in dimension_cases
+        equations = dimension_case[1]
+        coordinates_min = dimension_case[2]
+        coordinates_max = dimension_case[3]
+        expected_minimum = dimension_case[4]
+        expected_maximum = dimension_case[5]
+        initial_condition = (x, t, equations) -> SVector(sum(x))
+        mesh = TreeMesh(coordinates_min, coordinates_max;
+                        initial_refinement_level = 1,
+                        periodicity = true)
+        solver = DGSEM(polydeg = 1)
+        semi = SemidiscretizationHyperbolic(mesh, equations, initial_condition, solver;
+                                            boundary_conditions = boundary_condition_periodic)
+        u_ode = Trixi.compute_coefficients(0.0, semi)
+        bound = VariableBound(:sum_coordinates, (u, equations) -> u[1];
+                              lower = expected_minimum,
+                              upper = expected_maximum)
+
+        result = Trixi.evaluate_variable_bounds(u_ode, semi, (bound,)).sum_coordinates
+        @test result.minimum ≈ expected_minimum
+        @test result.maximum ≈ expected_maximum
+        @test !isviolated(result)
+    end
+
+    equations = CompressibleEulerEquations1D(1.4)
+    initial_condition = (x, t, equations) -> SVector(x[1], 2 * x[1], 3.0)
+    mesh = TreeMesh(-1.0, 1.0; initial_refinement_level = 1, periodicity = true)
+    solver = DGSEM(polydeg = 1)
+    semi = SemidiscretizationHyperbolic(mesh, equations, initial_condition, solver;
+                                        boundary_conditions = boundary_condition_periodic)
+    u_ode = Trixi.compute_coefficients(0.0, semi)
+    derived_bound = VariableBound(:sum_of_components,
+                                  (u, equations) -> u[1] + u[2];
+                                  lower = -3.0, upper = 3.0)
+    result = Trixi.evaluate_variable_bounds(u_ode, semi,
+                                            (derived_bound,)).sum_of_components
+    @test result.minimum ≈ -3.0
+    @test result.maximum ≈ 3.0
+end
+
 @testitem "Unit: TimeSeriesCallback" setup=[Setup, UnitTests] tags=[:misc_part1] begin
     # Test the 2D TreeMesh version of the callback and some warnings
     @test_trixi_include(joinpath(examples_dir(), "tree_2d_dgsem",

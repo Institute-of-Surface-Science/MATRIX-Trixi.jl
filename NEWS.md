@@ -8,6 +8,11 @@ for human readability.
 ## Changes in the MATRIX-Trixi.jl fork
 
 #### Added
+- Added `VariableBoundsCallback` for diagnostic monitoring of one-sided or two-sided
+  bounds on state components and derived scalar quantities, including tolerance-aware
+  violations, nonfinite detection, optional file output, MPI reductions, and termination
+  behavior
+  ([Institute-of-Surface-Science/MATRIX-Trixi.jl#12](https://github.com/Institute-of-Surface-Science/MATRIX-Trixi.jl/pull/12)).
 - Added `SpatiallyVaryingDiffusivity` for prescribed scalar isotropic diffusion
   coefficients depending on coordinates and time, together with a manufactured 2D
   convergence example

@@ -918,6 +918,154 @@ end
     @test_allocations(Trixi.rhs_parabolic!, semi, sol, 1000)
 end
 
+@testitem "Parabolic1D: VariableBoundsCallback" setup=[Setup, Parabolic1D] tags=[
+    :parabolic_part1
+] begin
+    @test_trixi_include(joinpath(EXAMPLES_DIR, "tree_1d_dgsem",
+                                 "elixir_diffusion_variable_bounds.jl"),
+                        l2=[5.326102683288938e-6],
+                        linf=[3.122527489207716e-5])
+
+    results = variable_bounds_callback(sol)
+    @test !isviolated(results.concentration)
+    @test results.concentration.minimum >= -1.0e-12
+    @test results.concentration.maximum <= 1.0 + 1.0e-12
+    @test variable_bounds_callback.affect!.checks_performed == 6
+    @test variable_bounds_callback.affect!.violations_detected == 0
+
+    @test_throws ArgumentError VariableBound(:invalid, concentration)
+    @test_throws ArgumentError VariableBound(:invalid, concentration;
+                                             lower = 1.0, upper = 0.0)
+    @test_throws ArgumentError VariableBound(:invalid, concentration;
+                                             lower = 0.0, abstol = -1.0)
+    @test_throws ArgumentError VariableBound(:invalid, concentration;
+                                             upper = 1.0, reltol = -1.0)
+    @test_throws ArgumentError VariableBoundsCallback(semi;
+                                                      bounds = (concentration_bound,),
+                                                      interval = -1)
+    @test_throws ArgumentError VariableBoundsCallback(semi;
+                                                      bounds = (concentration_bound,),
+                                                      action = :invalid)
+    @test_throws ArgumentError VariableBoundsCallback(semi;
+                                                      bounds = (concentration_bound,
+                                                                concentration_bound))
+    noncallable_bound = VariableBound(:noncallable, 42; lower = 0.0)
+    @test_throws ArgumentError VariableBoundsCallback(semi;
+                                                      bounds = (noncallable_bound,))
+
+    lower_bound = VariableBound(:lower, concentration; lower = 0.0)
+    lower_result = Trixi.make_bounds_result(lower_bound, -0.1, 0.8, 2, 0)
+    @test lower_result.minimum == -0.1
+    @test lower_result.maximum == 0.8
+    @test lower_result.lower_violation == 0.1
+    @test lower_result.lower_violated
+    @test !lower_result.upper_violated
+
+    upper_bound = VariableBound(:upper, concentration; upper = 1.0)
+    upper_result = Trixi.make_bounds_result(upper_bound, 0.1, 1.2, 2, 0)
+    @test upper_result.upper_violation ≈ 0.2
+    @test upper_result.upper_violated
+
+    tolerated_bound = VariableBound(:tolerated, concentration;
+                                    lower = 0.0, abstol = 1.0e-12)
+    tolerated_result = Trixi.make_bounds_result(tolerated_bound, -1.0e-13,
+                                                0.8, 2, 0)
+    @test tolerated_result.lower_violation == 1.0e-13
+    @test !tolerated_result.lower_violated
+    violated_result = Trixi.make_bounds_result(tolerated_bound, -1.0e-8,
+                                               0.8, 2, 0)
+    @test violated_result.lower_violated
+
+    relative_bound = VariableBound(:relative, concentration;
+                                   lower = 100.0, reltol = 1.0e-2)
+    relative_tolerated = Trixi.make_bounds_result(relative_bound, 99.5, 101.0,
+                                                  2, 0)
+    relative_violated = Trixi.make_bounds_result(relative_bound, 98.0, 101.0,
+                                                 2, 0)
+    @test relative_tolerated.lower_violation == 0.5
+    @test !relative_tolerated.lower_violated
+    @test relative_violated.lower_violated
+
+    nonlinear_bound = VariableBound(:concentration_squared,
+                                    (u, equations) -> u[1]^2;
+                                    lower = 0.0, upper = 1.0)
+    initial_state = copy(ode.u0)
+    nonlinear_results = Trixi.evaluate_variable_bounds(ode.u0, semi,
+                                                       (nonlinear_bound,))
+    @test nonlinear_results.concentration_squared.minimum >= 0.0
+    @test nonlinear_results.concentration_squared.maximum <= 1.0
+    @test ode.u0 == initial_state
+
+    nonfinite_state = copy(ode.u0)
+    nonfinite_state[1] = NaN
+    nonfinite_state[2] = Inf
+    nonfinite_results = Trixi.evaluate_variable_bounds(nonfinite_state, semi,
+                                                       (concentration_bound,))
+    @test nonfinite_results.concentration.nonfinite_count == 2
+    @test isviolated(nonfinite_results.concentration)
+
+    fill!(nonfinite_state, NaN)
+    all_nonfinite_results = Trixi.evaluate_variable_bounds(nonfinite_state, semi,
+                                                           (concentration_bound,))
+    @test all_nonfinite_results.concentration.finite_count == 0
+    @test isnan(all_nonfinite_results.concentration.minimum)
+    @test isnan(all_nonfinite_results.concentration.maximum)
+
+    termination_bound = VariableBound(:impossible, concentration; lower = 2.0)
+    termination_callback = VariableBoundsCallback(semi;
+                                                  bounds = (termination_bound,),
+                                                  interval = 1,
+                                                  check_initial = false,
+                                                  action = :terminate)
+    termination_solution = solve(ode, RDPK3SpFSAL35();
+                                 dt = 1.0e-3, adaptive = false,
+                                 ode_default_options()...,
+                                 callback = termination_callback)
+    @test termination_solution.t[end] < last(tspan)
+    @test termination_callback.affect!.violations_detected == 1
+    @test isviolated(termination_callback.affect!.last_results.impossible)
+
+    initial_termination_callback = VariableBoundsCallback(semi;
+                                                          bounds = (termination_bound,),
+                                                          interval = 0,
+                                                          check_initial = true,
+                                                          action = :terminate)
+    initial_termination_solution = solve(ode, RDPK3SpFSAL35();
+                                         dt = 1.0e-3, adaptive = false,
+                                         ode_default_options()...,
+                                         callback = initial_termination_callback)
+    @test initial_termination_solution.t[end] == first(tspan)
+    @test initial_termination_callback.affect!.checks_performed == 1
+
+    mktempdir() do output_directory
+        file_callback = VariableBoundsCallback(semi;
+                                               bounds = (concentration_bound,),
+                                               interval = 0,
+                                               check_initial = true,
+                                               check_final = true,
+                                               action = :record,
+                                               save_analysis = true,
+                                               output_directory = output_directory)
+        solve(ode, RDPK3SpFSAL35();
+              dt = 1.0e-3, adaptive = false,
+              ode_default_options()..., callback = file_callback)
+        filename = joinpath(output_directory, "variable_bounds.dat")
+        lines_first_run = readlines(filename)
+        @test isfile(filename)
+        @test count(line -> startswith(line, "#"), lines_first_run) == 1
+        @test count(line -> occursin("concentration", line), lines_first_run) == 2
+        @test startswith(lines_first_run[2], "0 ")
+
+        solve(ode, RDPK3SpFSAL35();
+              dt = 1.0e-3, adaptive = false,
+              ode_default_options()..., callback = file_callback)
+        @test length(readlines(filename)) == length(lines_first_run)
+    end
+
+    @test_nowarn show(devnull, variable_bounds_callback)
+    @test_nowarn show(devnull, MIME"text/plain"(), variable_bounds_callback)
+end
+
 @testitem "Parabolic1D: TreeMesh1D: elixir_diffusion_ldg_amr_boundary_layer.jl" setup=[
     Setup,
     Parabolic1D
