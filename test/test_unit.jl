@@ -1315,6 +1315,11 @@ end
                  SVector, StructuredMesh, TreeMesh, VariableBound, VariableBoundsCallback,
                  boundary_condition_periodic, isviolated
 
+    struct UnsupportedVariableBoundsBackend <: Trixi.KernelAbstractions.Backend end
+
+    @test isnothing(Trixi.ensure_variable_bounds_backend(nothing))
+    @test_throws ArgumentError Trixi.ensure_variable_bounds_backend(UnsupportedVariableBoundsBackend())
+
     dimension_cases = ((LinearScalarAdvectionEquation1D(1.0), -1.0, 1.0, -1.0, 1.0),
                        (LinearScalarAdvectionEquation2D(1.0, 1.0), (-1.0, -1.0), (1.0, 1.0),
                         -2.0, 2.0),
@@ -1338,7 +1343,8 @@ end
                               lower = expected_minimum,
                               upper = expected_maximum)
 
-        result = Trixi.evaluate_variable_bounds(u_ode, semi, (bound,)).sum_coordinates
+        results = @inferred Trixi.evaluate_variable_bounds(u_ode, semi, (bound,))
+        result = results.sum_coordinates
         @test result.minimum ≈ expected_minimum
         @test result.maximum ≈ expected_maximum
         @test !isviolated(result)

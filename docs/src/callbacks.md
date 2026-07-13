@@ -53,9 +53,23 @@ bounds = (VariableBound(:concentration, concentration;
                         lower = 0.0, upper = 1.0, abstol = 1.0e-12),)
 variable_bounds_callback = VariableBoundsCallback(semi; bounds, interval = 10)
 ```
+After a solve, the extrema and violation status of the final state are available
+programmatically by calling the callback with the solution:
+```julia
+results = variable_bounds_callback(sol)
+result = results.concentration
+result.minimum
+result.maximum
+isviolated(result)
+```
+`lower_violation` and `upper_violation` contain the raw distance outside each bound.
+The corresponding `lower_violated` and `upper_violated` flags account for the configured
+tolerances. `finite_count` and `nonfinite_count` report how many nodal samples were included.
+
 See `examples/tree_1d_dgsem/elixir_diffusion_variable_bounds.jl` for a complete diffusion
 example. Unlike [`BoundsCheckCallback`](@ref), `VariableBoundsCallback` is a general step
-diagnostic and is not coupled to a subcell limiter or an SSPRK stage.
+diagnostic and is not coupled to a subcell limiter or an SSPRK stage. It currently supports
+DGSEM solutions stored on the CPU; GPU storage and DGMulti solvers are not supported.
 
 ### I/O
 

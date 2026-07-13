@@ -89,6 +89,16 @@ analysis_callback = AnalysisCallback(semi;
                                                                  normal_flux_y_pos))
 alive_callback = AliveCallback(analysis_interval = analysis_interval)
 
+# Monitor the scalar throughout mesh adaptation. This diagnostic runs before AMR, so each
+# check sees a consistent solution and mesh from the accepted time step.
+scalar_bound = VariableBound(:scalar, (u, equations) -> u[1];
+                             lower = -1.0, upper = 2.0)
+variable_bounds_interval = 5
+variable_bounds_callback = VariableBoundsCallback(semi;
+                                                  bounds = (scalar_bound,),
+                                                  interval = variable_bounds_interval,
+                                                  action = :record)
+
 base_level = 0
 med_level = 1
 max_level = 3
@@ -109,8 +119,8 @@ amr_callback = AMRCallback(semi, amr_controller;
 cfl_parabolic = 2.0e-2
 stepsize_callback = StepsizeCallback(; cfl_parabolic)
 
-callbacks = CallbackSet(summary_callback, analysis_callback, alive_callback,
-                        amr_callback, stepsize_callback)
+callbacks = CallbackSet(summary_callback, analysis_callback, variable_bounds_callback,
+                        alive_callback, amr_callback, stepsize_callback)
 
 ###############################################################################
 # Time integration

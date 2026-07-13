@@ -21,7 +21,7 @@ where `u_node` is the local state vector. The return type must be a concrete `Re
 At least one of `lower` and `upper` must be provided. An unused side of the interval is
 represented by `nothing`; specified bounds and tolerances must be finite.
 """
-struct VariableBound{Variable, Lower, Upper, AbsTol, RelTol}
+struct VariableBound{Name, Variable, Lower, Upper, AbsTol, RelTol}
     name::Symbol
     variable::Variable
     lower::Lower
@@ -56,10 +56,12 @@ struct VariableBound{Variable, Lower, Upper, AbsTol, RelTol}
         isfinite(reltol) || throw(ArgumentError("`reltol` must be finite"))
         reltol >= 0 || throw(ArgumentError("`reltol` must be non-negative"))
 
-        return new{typeof(variable), typeof(lower), typeof(upper), typeof(abstol),
+        return new{name, typeof(variable), typeof(lower), typeof(upper), typeof(abstol),
                    typeof(reltol)}(name, variable, lower, upper, abstol, reltol)
     end
 end
+
+@inline variable_bound_name(::VariableBound{Name}) where {Name} = Name
 
 function VariableBound(name::Symbol, variable;
                        lower = nothing,
@@ -72,9 +74,13 @@ end
 """
     VariableBoundsResult
 
-Extrema and raw bound violations computed by [`VariableBoundsCallback`](@ref). A result
-is considered violated when either bound is exceeded beyond its tolerance or at least one
-sample is not finite; see [`isviolated`](@ref).
+Extrema and bound diagnostics computed by [`VariableBoundsCallback`](@ref).
+`lower_violation` and `upper_violation` are the raw distances outside the admissible
+interval, without applying a tolerance. `lower_violated` and `upper_violated` indicate
+whether these distances exceed the configured absolute and relative tolerances.
+`finite_count` and `nonfinite_count` report the number of finite and nonfinite nodal
+samples, respectively. A result is considered violated when either tolerance-aware flag
+is set or at least one sample is not finite; see [`isviolated`](@ref).
 """
 struct VariableBoundsResult{RealT <: Real}
     minimum::RealT
@@ -134,7 +140,8 @@ only and never modifies the numerical solution. File output is enabled with
 `save_analysis=true` and uses one row per variable and check.
 
 This callback supports DGSEM semidiscretizations on one-, two-, and three-dimensional
-meshes. DGMulti support is not currently available.
+meshes with CPU solution storage. GPU storage and DGMulti solvers are not currently
+supported.
 """
 # This is the convenience constructor that gets called from the elixirs
 function VariableBoundsCallback(semi::AbstractSemidiscretization;
@@ -164,7 +171,7 @@ function VariableBoundsCallback(mesh::Union{AbstractMesh{1}, AbstractMesh{2},
     bounds = Tuple(bounds)
     all(bound -> bound isa VariableBound, bounds) ||
         throw(ArgumentError("all entries of `bounds` must be `VariableBound`s"))
-    names = map(bound -> bound.name, bounds)
+    names = map(variable_bound_name, bounds)
     allunique(names) ||
         throw(ArgumentError("all variable-bound names must be unique"))
 
@@ -240,7 +247,7 @@ function initial_variable_bounds_results(bounds, equations,
         zero_value = zero(ResultT)
         VariableBoundsResult(nan, nan, zero_value, zero_value, 0, 0, false, false)
     end
-    names = map(bound -> bound.name, bounds)
+    names = map(variable_bound_name, bounds)
     return NamedTuple{names}(results)
 end
 
@@ -370,11 +377,19 @@ function check_variable_bounds!(callback::VariableBoundsCallback, u_ode, t, iter
     return nothing
 end
 
+@inline ensure_variable_bounds_backend(::Nothing) = nothing
+@inline ensure_variable_bounds_backend(::KernelAbstractions.CPU) = nothing
+
+function ensure_variable_bounds_backend(::KernelAbstractions.Backend)
+    throw(ArgumentError("VariableBoundsCallback currently supports only CPU solution storage"))
+end
+
 function evaluate_variable_bounds(u_ode, semi, bounds)
+    ensure_variable_bounds_backend(trixi_backend(u_ode))
     mesh, equations, solver, cache = mesh_equations_solver_cache(semi)
     u = wrap_array(u_ode, mesh, equations, solver, cache)
     results = evaluate_variable_bounds(bounds, u, mesh, equations, solver, cache)
-    names = map(bound -> bound.name, bounds)
+    names = map(variable_bound_name, bounds)
     return NamedTuple{names}(results)
 end
 
