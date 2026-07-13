@@ -1305,6 +1305,132 @@ end
                                      callback = StepsizeCallback(cfl = 1.0))
 end
 
+@testitem "Unit: VariableBoundsCallback dimensional DGSEM kernels" setup=[
+    Setup,
+    UnitTests
+] tags=[:misc_part1] begin
+    using Trixi: Trixi, CompressibleEulerEquations1D, DGSEM,
+                 LinearScalarAdvectionEquation1D, LinearScalarAdvectionEquation2D,
+                 LinearScalarAdvectionEquation3D, SemidiscretizationHyperbolic,
+                 SVector, StructuredMesh, TreeMesh, VariableBound, VariableBoundsCallback,
+                 boundary_condition_periodic, isviolated
+
+    struct UnsupportedVariableBoundsBackend <: Trixi.KernelAbstractions.Backend end
+
+    @test isnothing(Trixi.ensure_variable_bounds_backend(nothing))
+    @test_throws ArgumentError Trixi.ensure_variable_bounds_backend(UnsupportedVariableBoundsBackend())
+
+    dimension_cases = ((LinearScalarAdvectionEquation1D(1.0), -1.0, 1.0, -1.0, 1.0),
+                       (LinearScalarAdvectionEquation2D(1.0, 1.0), (-1.0, -1.0), (1.0, 1.0),
+                        -2.0, 2.0),
+                       (LinearScalarAdvectionEquation3D(1.0, 1.0, 1.0),
+                        (-1.0, -1.0, -1.0), (1.0, 1.0, 1.0), -3.0, 3.0))
+    for dimension_case in dimension_cases
+        equations = dimension_case[1]
+        coordinates_min = dimension_case[2]
+        coordinates_max = dimension_case[3]
+        expected_minimum = dimension_case[4]
+        expected_maximum = dimension_case[5]
+        initial_condition = (x, t, equations) -> SVector(sum(x))
+        mesh = TreeMesh(coordinates_min, coordinates_max;
+                        initial_refinement_level = 1,
+                        periodicity = true)
+        solver = DGSEM(polydeg = 1)
+        semi = SemidiscretizationHyperbolic(mesh, equations, initial_condition, solver;
+                                            boundary_conditions = boundary_condition_periodic)
+        u_ode = Trixi.compute_coefficients(0.0, semi)
+        bound = VariableBound(:sum_coordinates, (u, equations) -> u[1];
+                              lower = expected_minimum,
+                              upper = expected_maximum)
+
+        results = @inferred Trixi.evaluate_variable_bounds(u_ode, semi, (bound,))
+        result = results.sum_coordinates
+        @test result.minimum ≈ expected_minimum
+        @test result.maximum ≈ expected_maximum
+        @test !isviolated(result)
+    end
+
+    equations = LinearScalarAdvectionEquation2D(1.0, 1.0)
+    mesh = StructuredMesh((2, 2), (-1.0, -1.0), (1.0, 1.0);
+                          periodicity = true)
+    solver = DGSEM(polydeg = 1)
+    initial_condition = (x, t, equations) -> SVector(sum(x))
+    semi = SemidiscretizationHyperbolic(mesh, equations, initial_condition, solver;
+                                        boundary_conditions = boundary_condition_periodic)
+    u_ode = Trixi.compute_coefficients(0.0, semi)
+    structured_bound = VariableBound(:sum_coordinates, (u, equations) -> u[1];
+                                     lower = -2.0, upper = 2.0)
+    structured_callback = VariableBoundsCallback(semi; bounds = (structured_bound,),
+                                                 interval = 0)
+    @test isnan(structured_callback.affect!.last_results.sum_coordinates.minimum)
+    structured_result = Trixi.evaluate_variable_bounds(u_ode, semi,
+                                                       (structured_bound,)).sum_coordinates
+    @test structured_result.minimum ≈ -2.0
+    @test structured_result.maximum ≈ 2.0
+    @test !isviolated(structured_result)
+
+    equations = CompressibleEulerEquations1D(1.4)
+    initial_condition = (x, t, equations) -> SVector(x[1], 2 * x[1], 3.0)
+    mesh = TreeMesh(-1.0, 1.0; initial_refinement_level = 1, periodicity = true)
+    solver = DGSEM(polydeg = 1)
+    semi = SemidiscretizationHyperbolic(mesh, equations, initial_condition, solver;
+                                        boundary_conditions = boundary_condition_periodic)
+    u_ode = Trixi.compute_coefficients(0.0, semi)
+    derived_bound = VariableBound(:sum_of_components,
+                                  (u, equations) -> u[1] + u[2];
+                                  lower = -3.0, upper = 3.0)
+    result = Trixi.evaluate_variable_bounds(u_ode, semi,
+                                            (derived_bound,)).sum_of_components
+    @test result.minimum ≈ -3.0
+    @test result.maximum ≈ 3.0
+
+    equations = LinearScalarAdvectionEquation1D(Float32(1))
+    mesh = TreeMesh(-1.0, 1.0; initial_refinement_level = 1, periodicity = true)
+    solver = Trixi.trixi_adapt(Array, Float32, DGSEM(polydeg = 1))
+    initial_condition = (x, t, equations) -> SVector(Float32(1))
+    semi = SemidiscretizationHyperbolic(mesh, equations, initial_condition, solver;
+                                        boundary_conditions = boundary_condition_periodic)
+    u_ode = Trixi.compute_coefficients(0.0, semi)
+    widened_variable = (u, equations) -> Float64(u[1]) + 1.0e-8
+    widened_bound = VariableBound(:widened, widened_variable; upper = 1.0)
+    widened_result = Trixi.evaluate_variable_bounds(u_ode, semi,
+                                                    (widened_bound,)).widened
+    widened_callback = VariableBoundsCallback(semi; bounds = (widened_bound,),
+                                              interval = 0)
+    @test widened_result.maximum ≈ 1.0 + 1.0e-8
+    @test widened_result.upper_violation ≈ 1.0e-8
+    @test widened_result.upper_violated
+    @test typeof(widened_callback.affect!.last_results) ===
+          typeof((widened = widened_result,))
+
+    setprecision(BigFloat, 128) do
+        equations = LinearScalarAdvectionEquation1D(1.0)
+        mesh = TreeMesh(-1.0, 1.0;
+                        initial_refinement_level = 1,
+                        periodicity = true)
+        solver = DGSEM(polydeg = 1)
+        value = BigFloat(1) + BigFloat("1e-30")
+        upper = BigFloat(1) + BigFloat("5e-31")
+        initial_condition = (x, t, equations) -> SVector(value)
+        semi = SemidiscretizationHyperbolic(mesh, equations, initial_condition, solver;
+                                            boundary_conditions = boundary_condition_periodic,
+                                            uEltype = BigFloat)
+        u_ode = Trixi.compute_coefficients(0.0, semi)
+        precise_variable = (u::SVector{1, BigFloat}, equations) -> u[1]
+        precise_bound = VariableBound(:precise_state, precise_variable; upper)
+        precise_callback = VariableBoundsCallback(semi; bounds = (precise_bound,),
+                                                  interval = 0)
+        precise_result = Trixi.evaluate_variable_bounds(u_ode, semi,
+                                                        (precise_bound,)).precise_state
+
+        @test precise_result.maximum == value
+        @test precise_result.upper_violation == value - upper
+        @test precise_result.upper_violated
+        @test typeof(precise_callback.affect!.last_results) ===
+              typeof((precise_state = precise_result,))
+    end
+end
+
 @testitem "Unit: TimeSeriesCallback" setup=[Setup, UnitTests] tags=[:misc_part1] begin
     # Test the 2D TreeMesh version of the callback and some warnings
     @test_trixi_include(joinpath(examples_dir(), "tree_2d_dgsem",

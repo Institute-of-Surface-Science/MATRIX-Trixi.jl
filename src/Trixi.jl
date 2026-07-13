@@ -362,6 +362,7 @@ export SemidiscretizationEulerGravity, ParametersEulerGravity,
 export SemidiscretizationCoupled, SemidiscretizationCoupledP4est
 
 export SummaryCallback, SteadyStateCallback, AnalysisCallback, AliveCallback,
+       VariableBound, VariableBoundsResult, VariableBoundsCallback, isviolated,
        SaveRestartCallback, SaveSolutionCallback, TimeSeriesCallback, VisualizationCallback,
        AveragingCallback,
        AMRCallback, StepsizeCallback,

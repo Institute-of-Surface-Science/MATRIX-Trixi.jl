@@ -1486,6 +1486,14 @@ end
     @test mass_rate≈net_boundary_flux atol=1.0e-10 rtol=1.0e-10
     @test final_mass≈initial_mass atol=1.0e-10 rtol=1.0e-10
 
+    bounds_result = variable_bounds_callback(sol).scalar
+    expected_bounds_checks = 1 + sol.stats.naccept ÷ variable_bounds_interval +
+                             !iszero(sol.stats.naccept % variable_bounds_interval)
+    @test variable_bounds_callback.affect!.checks_performed == expected_bounds_checks
+    @test variable_bounds_callback.affect!.violations_detected == 0
+    @test bounds_result.finite_count == length(sol.u[end])
+    @test !isviolated(bounds_result)
+
     # Ensure that we do not have excessive memory allocations
     # (e.g., from type instabilities)
     @test_allocations(Trixi.rhs_parabolic!, semi, sol, 1000)
