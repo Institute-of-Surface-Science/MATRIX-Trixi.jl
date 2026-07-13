@@ -5,6 +5,13 @@ Trixi.jl follows the interpretation of
 used in the Julia ecosystem. Notable changes will be documented in this file
 for human readability.
 
+## Changes in the MATRIX-Trixi.jl fork
+
+#### Added
+- Added an implicit 1D scalar diffusion example using `SemidiscretizationParabolic`,
+  `LinearDiffusionEquation1D`, and `TRBDF2` time integration
+  ([Institute-of-Surface-Science/MATRIX-Trixi.jl#1](https://github.com/Institute-of-Surface-Science/MATRIX-Trixi.jl/pull/1)).
+
 ## Changes in the v0.16 lifecycle
 
 #### Added
