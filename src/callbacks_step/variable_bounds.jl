@@ -76,7 +76,7 @@ Extrema and raw bound violations computed by [`VariableBoundsCallback`](@ref). A
 is considered violated when either bound is exceeded beyond its tolerance or at least one
 sample is not finite; see [`isviolated`](@ref).
 """
-struct VariableBoundsResult{RealT}
+struct VariableBoundsResult{RealT <: Real}
     minimum::RealT
     maximum::RealT
     lower_violation::RealT
@@ -97,7 +97,7 @@ Return whether `result` contains a bound violation or a nonfinite sample.
            result.nonfinite_count > 0
 end
 
-mutable struct VariableBoundsCallback{Bounds, RealT, Results, WorstLower, WorstUpper,
+mutable struct VariableBoundsCallback{Bounds, Results, WorstLower, WorstUpper,
                                       NonfiniteTotals}
     const bounds::Bounds
     const interval::Int
@@ -136,7 +136,17 @@ only and never modifies the numerical solution. File output is enabled with
 This callback supports DGSEM semidiscretizations on one-, two-, and three-dimensional
 meshes. DGMulti support is not currently available.
 """
+# This is the convenience constructor that gets called from the elixirs
 function VariableBoundsCallback(semi::AbstractSemidiscretization;
+                                kwargs...)
+    mesh, equations, solver, cache = mesh_equations_solver_cache(semi)
+    return VariableBoundsCallback(mesh, equations, solver, cache; kwargs...)
+end
+
+# This is the actual constructor
+function VariableBoundsCallback(mesh::Union{AbstractMesh{1}, AbstractMesh{2},
+                                            AbstractMesh{3}},
+                                equations, solver::DGSEM, cache;
                                 bounds,
                                 interval = 1,
                                 check_initial = true,
@@ -158,12 +168,6 @@ function VariableBoundsCallback(semi::AbstractSemidiscretization;
     allunique(names) ||
         throw(ArgumentError("all variable-bound names must be unique"))
 
-    mesh, equations, solver, _ = mesh_equations_solver_cache(semi)
-    solver isa DGSEM ||
-        throw(ArgumentError("VariableBoundsCallback currently supports only DGSEM solvers"))
-    ndims(mesh) in 1:3 ||
-        throw(ArgumentError("VariableBoundsCallback requires a one-, two-, or three-dimensional mesh"))
-
     RealT = real(solver)
     u_node = SVector(ntuple(_ -> zero(RealT), nvariables(equations)))
     for bound in bounds
@@ -178,7 +182,7 @@ function VariableBoundsCallback(semi::AbstractSemidiscretization;
     worst_upper = map(result -> zero(result.upper_violation), result_values)
     nonfinite_totals = map(_ -> 0, result_values)
 
-    CallbackT = VariableBoundsCallback{typeof(bounds), RealT, typeof(last_results),
+    CallbackT = VariableBoundsCallback{typeof(bounds), typeof(last_results),
                                        typeof(worst_lower), typeof(worst_upper),
                                        typeof(nonfinite_totals)}
     variable_bounds_callback = CallbackT(bounds, Int(interval), check_initial,
@@ -201,6 +205,11 @@ function VariableBoundsCallback(semi::AbstractSemidiscretization;
     return DiscreteCallback(condition, variable_bounds_callback;
                             save_positions = (false, false),
                             initialize = initialize!)
+end
+
+function VariableBoundsCallback(mesh, equations, solver, cache; kwargs...)
+    throw(ArgumentError("VariableBoundsCallback requires a one-, two-, or " *
+                        "three-dimensional mesh with a DGSEM solver"))
 end
 
 function variable_value_type(variable, equations, solver)
@@ -316,7 +325,9 @@ end
 
 function check_variable_bounds!(callback::VariableBoundsCallback, u_ode, t, iter,
                                 integrator)
-    results = evaluate_variable_bounds(u_ode, integrator.p, callback.bounds)
+    results = @trixi_timeit timer() "variable bounds" evaluate_variable_bounds(u_ode,
+                                                                               integrator.p,
+                                                                               callback.bounds)
     callback.last_results = results
     callback.checks_performed += 1
 
@@ -351,6 +362,9 @@ function check_variable_bounds!(callback::VariableBoundsCallback, u_ode, t, iter
     if isfinished(integrator) && mpi_isroot()
         print_variable_bounds_summary(callback)
     end
+
+    # avoid re-evaluating possible FSAL stages
+    derivative_discontinuity!(integrator, false)
     return nothing
 end
 
@@ -526,15 +540,6 @@ function (cb::DiscreteCallback{Condition, Affect!})(sol) where {Condition,
                                                                 VariableBoundsCallback}
     callback = cb.affect!
     return evaluate_variable_bounds(sol.u[end], sol.prob.p, callback.bounds)
-end
-
-function reduce_thread_extrema(thread_min, thread_max, thread_finite,
-                               thread_nonfinite)
-    value_min = reduce(Base.min, thread_min)
-    value_max = reduce(Base.max, thread_max)
-    finite_count = sum(thread_finite)
-    nonfinite_count = sum(thread_nonfinite)
-    return value_min, value_max, finite_count, nonfinite_count
 end
 
 include("variable_bounds_dg1d.jl")

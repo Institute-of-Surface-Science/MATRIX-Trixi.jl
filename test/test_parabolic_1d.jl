@@ -1028,6 +1028,22 @@ end
     @test isnan(all_nonfinite_results.concentration.minimum)
     @test isnan(all_nonfinite_results.concentration.maximum)
 
+    fsal_ode = semidiscretize(semi, (0.0, 0.01))
+    solution_without_bounds = solve(fsal_ode, RDPK3SpFSAL35();
+                                    dt = 1.0e-3, adaptive = false,
+                                    ode_default_options()...)
+    fsal_callback = VariableBoundsCallback(semi;
+                                           bounds = (concentration_bound,),
+                                           interval = 1,
+                                           check_initial = false,
+                                           check_final = false,
+                                           action = :record)
+    solution_with_bounds = solve(fsal_ode, RDPK3SpFSAL35();
+                                 dt = 1.0e-3, adaptive = false,
+                                 ode_default_options()...,
+                                 callback = fsal_callback)
+    @test solution_with_bounds.stats.nf == solution_without_bounds.stats.nf
+
     termination_bound = VariableBound(:impossible, concentration; lower = 2.0)
     termination_callback = VariableBoundsCallback(semi;
                                                   bounds = (termination_bound,),
