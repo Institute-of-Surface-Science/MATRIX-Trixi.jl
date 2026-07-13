@@ -1486,6 +1486,15 @@ end
     @test mass_rate≈net_boundary_flux atol=1.0e-10 rtol=1.0e-10
     @test final_mass≈initial_mass atol=1.0e-10 rtol=1.0e-10
 
+    scalar_bound = VariableBound(:scalar, (u, equations) -> u[1];
+                                 lower = -1.0, upper = 2.0)
+    variable_bounds_callback = VariableBoundsCallback(semi;
+                                                      bounds = (scalar_bound,),
+                                                      interval = 0)
+    bounds_result = variable_bounds_callback(sol).scalar
+    @test bounds_result.finite_count == length(sol.u[end])
+    @test !isviolated(bounds_result)
+
     # Ensure that we do not have excessive memory allocations
     # (e.g., from type instabilities)
     @test_allocations(Trixi.rhs_parabolic!, semi, sol, 1000)

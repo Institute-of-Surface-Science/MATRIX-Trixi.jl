@@ -635,10 +635,24 @@ end
 
     semi_no_reaction = remake(semi; source_terms_parabolic = nothing)
     ode_no_reaction = semidiscretize(semi_no_reaction, tspan)
+    mobile_bound = VariableBound(:mobile, (u, equations) -> u[1];
+                                 lower = 0.0, upper = 2.0)
+    immobile_bound = VariableBound(:immobile, (u, equations) -> u[2];
+                                   lower = 0.0, upper = 1.0)
+    imex_bounds_callback = VariableBoundsCallback(semi_no_reaction;
+                                                  bounds = (mobile_bound,
+                                                            immobile_bound),
+                                                  interval = 1,
+                                                  action = :record)
     sol_no_reaction = solve(ode_no_reaction, ode_alg;
                             abstol = 1.0e-8, reltol = 1.0e-8,
-                            save_everystep = false)
+                            save_everystep = false,
+                            callback = imex_bounds_callback)
     @test Trixi.SciMLBase.successful_retcode(sol_no_reaction.retcode)
+    @test imex_bounds_callback.affect!.checks_performed ==
+          sol_no_reaction.stats.naccept + 1
+    @test !isviolated(imex_bounds_callback.affect!.last_results.mobile)
+    @test !isviolated(imex_bounds_callback.affect!.last_results.immobile)
 
     u_initial = Trixi.wrap_array(sol_no_reaction.u[1], semi_no_reaction)
     u_final = Trixi.wrap_array(sol_no_reaction.u[end], semi_no_reaction)
@@ -913,6 +927,24 @@ end
     fine_l2_error, fine_linf_error = analysis_callback(sol)
     @test all(fine_l2_error .< coarse_l2_error)
     @test all(fine_linf_error .< coarse_linf_error)
+
+    scalar_bound = VariableBound(:scalar, (u, equations) -> u[1];
+                                 lower = -0.1, upper = 1.1)
+    implicit_bounds_callback = VariableBoundsCallback(semi;
+                                                      bounds = (scalar_bound,),
+                                                      interval = 1,
+                                                      action = :record)
+    implicit_ode = semidiscretize(semi, (0.0, 0.01))
+    implicit_solution = solve(implicit_ode,
+                              TRBDF2(; autodiff = AutoFiniteDiff());
+                              abstol = time_int_tol, reltol = time_int_tol,
+                              dt = 1.0e-2, save_everystep = false,
+                              callback = implicit_bounds_callback)
+    @test Trixi.SciMLBase.successful_retcode(implicit_solution.retcode)
+    @test implicit_bounds_callback.affect!.checks_performed ==
+          implicit_solution.stats.naccept + 1
+    @test !isviolated(implicit_bounds_callback.affect!.last_results.scalar)
+
     # Ensure that we do not have excessive memory allocations
     # (e.g., from type instabilities)
     @test_allocations(Trixi.rhs_parabolic!, semi, sol, 1000)
@@ -1043,6 +1075,22 @@ end
                                  ode_default_options()...,
                                  callback = fsal_callback)
     @test solution_with_bounds.stats.nf == solution_without_bounds.stats.nf
+
+    adaptive_callback = VariableBoundsCallback(semi;
+                                               bounds = (concentration_bound,),
+                                               interval = 2,
+                                               check_initial = true,
+                                               check_final = true,
+                                               action = :record)
+    adaptive_solution = solve(ode, RDPK3SpFSAL35();
+                              dt = 0.1, adaptive = true,
+                              abstol = 1.0e-12, reltol = 1.0e-12,
+                              ode_default_options()...,
+                              callback = adaptive_callback)
+    expected_checks = 1 + adaptive_solution.stats.naccept ÷ 2 +
+                      !iszero(adaptive_solution.stats.naccept % 2)
+    @test adaptive_solution.stats.nreject > 0
+    @test adaptive_callback.affect!.checks_performed == expected_checks
 
     termination_bound = VariableBound(:impossible, concentration; lower = 2.0)
     termination_callback = VariableBoundsCallback(semi;

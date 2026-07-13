@@ -168,15 +168,15 @@ function VariableBoundsCallback(mesh::Union{AbstractMesh{1}, AbstractMesh{2},
     allunique(names) ||
         throw(ArgumentError("all variable-bound names must be unique"))
 
-    RealT = real(solver)
-    u_node = SVector(ntuple(_ -> zero(RealT), nvariables(equations)))
+    uEltype = eltype(cache.elements)
+    u_node = SVector(ntuple(_ -> zero(uEltype), nvariables(equations)))
     for bound in bounds
         applicable(bound.variable, u_node, equations) ||
             throw(ArgumentError("variable `$(bound.name)` must be callable as variable(u_node, equations)"))
-        variable_value_type(bound.variable, equations, solver)
+        variable_value_type(bound.variable, equations, uEltype)
     end
 
-    last_results = initial_variable_bounds_results(bounds, equations, solver)
+    last_results = initial_variable_bounds_results(bounds, equations, uEltype)
     result_values = values(last_results)
     worst_lower = map(result -> zero(result.lower_violation), result_values)
     worst_upper = map(result -> zero(result.upper_violation), result_values)
@@ -212,8 +212,9 @@ function VariableBoundsCallback(mesh, equations, solver, cache; kwargs...)
                         "three-dimensional mesh with a DGSEM solver"))
 end
 
-function variable_value_type(variable, equations, solver)
-    NodeT = SVector{nvariables(equations), real(solver)}
+function variable_value_type(variable, equations,
+                             ::Type{uEltype}) where {uEltype <: Real}
+    NodeT = SVector{nvariables(equations), uEltype}
     ValueT = Base.promote_op(variable, NodeT, typeof(equations))
     if !isconcretetype(ValueT) || !(ValueT <: Real)
         throw(ArgumentError("variables monitored by VariableBoundsCallback must " *
@@ -229,10 +230,11 @@ function variable_bounds_result_type(bound, ValueT)
                         typeof(bound.reltol))
 end
 
-function initial_variable_bounds_results(bounds, equations, solver)
+function initial_variable_bounds_results(bounds, equations,
+                                         ::Type{uEltype}) where {uEltype <: Real}
     results = map(bounds) do bound
-        ValueT = variable_value_type(bound.variable, equations, solver)
-        ExtremaT = promote_type(real(solver), ValueT)
+        ValueT = variable_value_type(bound.variable, equations, uEltype)
+        ExtremaT = promote_type(uEltype, ValueT)
         ResultT = variable_bounds_result_type(bound, ExtremaT)
         nan = convert(ResultT, NaN)
         zero_value = zero(ResultT)
@@ -386,6 +388,40 @@ end
 
 function evaluate_variable_bounds(::Tuple{}, u, mesh, equations, solver, cache)
     return ()
+end
+
+function local_variable_extrema(variable, u, mesh::AbstractMesh{NDIMS}, equations,
+                                dg::DGSEM, cache) where {NDIMS}
+    uEltype = eltype(u)
+    ValueT = variable_value_type(variable, equations, uEltype)
+    RealT = promote_type(uEltype, ValueT)
+    value_min = typemax(RealT)
+    value_max = typemin(RealT)
+    finite_count = 0
+    nonfinite_count = 0
+
+    if isbitstype(RealT)
+        @batch reduction=((min, value_min), (max, value_max), (+, finite_count),
+                          (+, nonfinite_count)) for element in eachelement(dg, cache)
+            element_extrema = variable_extrema_at_element(variable, u, element, mesh,
+                                                          equations, dg, RealT)
+            value_min = Base.min(value_min, element_extrema[1])
+            value_max = Base.max(value_max, element_extrema[2])
+            finite_count += element_extrema[3]
+            nonfinite_count += element_extrema[4]
+        end
+    else
+        for element in eachelement(dg, cache)
+            element_extrema = variable_extrema_at_element(variable, u, element, mesh,
+                                                          equations, dg, RealT)
+            value_min = Base.min(value_min, element_extrema[1])
+            value_max = Base.max(value_max, element_extrema[2])
+            finite_count += element_extrema[3]
+            nonfinite_count += element_extrema[4]
+        end
+    end
+
+    return value_min, value_max, finite_count, nonfinite_count
 end
 
 function evaluate_variable_bound(bound::VariableBound, u, mesh, equations, solver,
