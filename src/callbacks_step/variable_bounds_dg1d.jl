@@ -1,6 +1,7 @@
 function local_variable_extrema(variable, u, mesh::AbstractMesh{1}, equations,
                                 dg::DGSEM, cache)
-    RealT = real(dg)
+    ValueT = variable_value_type(variable, equations, dg)
+    RealT = promote_type(real(dg), ValueT)
     thread_min = fill(typemax(RealT), Threads.maxthreadid())
     thread_max = fill(typemin(RealT), Threads.maxthreadid())
     thread_finite = zeros(Int, Threads.maxthreadid())

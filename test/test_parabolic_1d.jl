@@ -940,6 +940,12 @@ end
                                              lower = 0.0, abstol = -1.0)
     @test_throws ArgumentError VariableBound(:invalid, concentration;
                                              upper = 1.0, reltol = -1.0)
+    @test_throws ArgumentError VariableBound(:invalid, concentration; lower = NaN)
+    @test_throws ArgumentError VariableBound(:invalid, concentration; upper = Inf)
+    @test_throws ArgumentError VariableBound(:invalid, concentration;
+                                             lower = 0.0, abstol = Inf)
+    @test_throws ArgumentError VariableBound(:invalid, concentration;
+                                             upper = 1.0, reltol = Inf)
     @test_throws ArgumentError VariableBoundsCallback(semi;
                                                       bounds = (concentration_bound,),
                                                       interval = -1)
@@ -952,6 +958,9 @@ end
     noncallable_bound = VariableBound(:noncallable, 42; lower = 0.0)
     @test_throws ArgumentError VariableBoundsCallback(semi;
                                                       bounds = (noncallable_bound,))
+    complex_bound = VariableBound(:complex, (u, equations) -> complex(u[1]);
+                                  lower = 0.0)
+    @test_throws ArgumentError VariableBoundsCallback(semi; bounds = (complex_bound,))
 
     lower_bound = VariableBound(:lower, concentration; lower = 0.0)
     lower_result = Trixi.make_bounds_result(lower_bound, -0.1, 0.8, 2, 0)
@@ -985,6 +994,14 @@ end
     @test relative_tolerated.lower_violation == 0.5
     @test !relative_tolerated.lower_violated
     @test relative_violated.lower_violated
+
+    precise_lower = Float64(1) + 1.0e-8
+    precise_bound = VariableBound(:precise, concentration; lower = precise_lower)
+    precise_result = Trixi.make_bounds_result(precise_bound, Float32(1), Float32(1),
+                                              1, 0)
+    @test precise_result.minimum isa Float64
+    @test precise_result.lower_violation ≈ 1.0e-8
+    @test precise_result.lower_violated
 
     nonlinear_bound = VariableBound(:concentration_squared,
                                     (u, equations) -> u[1]^2;

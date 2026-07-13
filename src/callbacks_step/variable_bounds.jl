@@ -17,8 +17,9 @@ signature
 
     variable(u_node, equations) -> Real
 
-where `u_node` is the local state vector. At least one of `lower` and `upper` must be
-provided. An unused side of the interval is represented by `nothing`.
+where `u_node` is the local state vector. The return type must be a concrete `Real` type.
+At least one of `lower` and `upper` must be provided. An unused side of the interval is
+represented by `nothing`; specified bounds and tolerances must be finite.
 """
 struct VariableBound{Variable, Lower, Upper, AbsTol, RelTol}
     name::Symbol
@@ -35,16 +36,24 @@ struct VariableBound{Variable, Lower, Upper, AbsTol, RelTol}
         if lower !== nothing && !(lower isa Real)
             throw(ArgumentError("`lower` must be a real number or `nothing`"))
         end
+        if lower !== nothing && !isfinite(lower)
+            throw(ArgumentError("`lower` must be finite"))
+        end
         if upper !== nothing && !(upper isa Real)
             throw(ArgumentError("`upper` must be a real number or `nothing`"))
+        end
+        if upper !== nothing && !isfinite(upper)
+            throw(ArgumentError("`upper` must be finite"))
         end
         if lower !== nothing && upper !== nothing && lower > upper
             throw(ArgumentError("`lower` must not be greater than `upper`"))
         end
 
         abstol isa Real || throw(ArgumentError("`abstol` must be a real number"))
+        isfinite(abstol) || throw(ArgumentError("`abstol` must be finite"))
         abstol >= 0 || throw(ArgumentError("`abstol` must be non-negative"))
         reltol isa Real || throw(ArgumentError("`reltol` must be a real number"))
+        isfinite(reltol) || throw(ArgumentError("`reltol` must be finite"))
         reltol >= 0 || throw(ArgumentError("`reltol` must be non-negative"))
 
         return new{typeof(variable), typeof(lower), typeof(upper), typeof(abstol),
@@ -160,9 +169,10 @@ function VariableBoundsCallback(semi::AbstractSemidiscretization;
     for bound in bounds
         applicable(bound.variable, u_node, equations) ||
             throw(ArgumentError("variable `$(bound.name)` must be callable as variable(u_node, equations)"))
+        variable_value_type(bound.variable, equations, solver)
     end
 
-    last_results = initial_variable_bounds_results(bounds, RealT)
+    last_results = initial_variable_bounds_results(bounds, equations, solver)
     result_values = values(last_results)
     worst_lower = map(result -> zero(result.lower_violation), result_values)
     worst_upper = map(result -> zero(result.upper_violation), result_values)
@@ -193,9 +203,28 @@ function VariableBoundsCallback(semi::AbstractSemidiscretization;
                             initialize = initialize!)
 end
 
-function initial_variable_bounds_results(bounds, ::Type{RealT}) where {RealT}
+function variable_value_type(variable, equations, solver)
+    NodeT = SVector{nvariables(equations), real(solver)}
+    ValueT = Base.promote_op(variable, NodeT, typeof(equations))
+    if !isconcretetype(ValueT) || !(ValueT <: Real)
+        throw(ArgumentError("variables monitored by VariableBoundsCallback must " *
+                            "return a concrete real type"))
+    end
+    return ValueT
+end
+
+function variable_bounds_result_type(bound, ValueT)
+    LowerT = bound.lower === nothing ? ValueT : typeof(bound.lower)
+    UpperT = bound.upper === nothing ? ValueT : typeof(bound.upper)
+    return promote_type(ValueT, LowerT, UpperT, typeof(bound.abstol),
+                        typeof(bound.reltol))
+end
+
+function initial_variable_bounds_results(bounds, equations, solver)
     results = map(bounds) do bound
-        ResultT = promote_type(RealT, typeof(bound.abstol), typeof(bound.reltol))
+        ValueT = variable_value_type(bound.variable, equations, solver)
+        ExtremaT = promote_type(real(solver), ValueT)
+        ResultT = variable_bounds_result_type(bound, ExtremaT)
         nan = convert(ResultT, NaN)
         zero_value = zero(ResultT)
         VariableBoundsResult(nan, nan, zero_value, zero_value, 0, 0, false, false)
@@ -372,8 +401,8 @@ end
 
 function make_bounds_result(bound::VariableBound, value_min, value_max, finite_count,
                             nonfinite_count)
-    RealT = promote_type(typeof(value_min), typeof(value_max), typeof(bound.abstol),
-                         typeof(bound.reltol))
+    ValueT = promote_type(typeof(value_min), typeof(value_max))
+    RealT = variable_bounds_result_type(bound, ValueT)
     minimum = convert(RealT, value_min)
     maximum = convert(RealT, value_max)
     zero_value = zero(RealT)

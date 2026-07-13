@@ -1312,8 +1312,8 @@ end
     using Trixi: Trixi, CompressibleEulerEquations1D, DGSEM,
                  LinearScalarAdvectionEquation1D, LinearScalarAdvectionEquation2D,
                  LinearScalarAdvectionEquation3D, SemidiscretizationHyperbolic,
-                 SVector, TreeMesh, VariableBound, boundary_condition_periodic,
-                 isviolated
+                 SVector, TreeMesh, VariableBound, VariableBoundsCallback,
+                 boundary_condition_periodic, isviolated
 
     dimension_cases = ((LinearScalarAdvectionEquation1D(1.0), -1.0, 1.0, -1.0, 1.0),
                        (LinearScalarAdvectionEquation2D(1.0, 1.0), (-1.0, -1.0), (1.0, 1.0),
@@ -1358,6 +1358,25 @@ end
                                             (derived_bound,)).sum_of_components
     @test result.minimum ≈ -3.0
     @test result.maximum ≈ 3.0
+
+    equations = LinearScalarAdvectionEquation1D(Float32(1))
+    mesh = TreeMesh(-1.0, 1.0; initial_refinement_level = 1, periodicity = true)
+    solver = Trixi.trixi_adapt(Array, Float32, DGSEM(polydeg = 1))
+    initial_condition = (x, t, equations) -> SVector(Float32(1))
+    semi = SemidiscretizationHyperbolic(mesh, equations, initial_condition, solver;
+                                        boundary_conditions = boundary_condition_periodic)
+    u_ode = Trixi.compute_coefficients(0.0, semi)
+    widened_variable = (u, equations) -> Float64(u[1]) + 1.0e-8
+    widened_bound = VariableBound(:widened, widened_variable; upper = 1.0)
+    widened_result = Trixi.evaluate_variable_bounds(u_ode, semi,
+                                                    (widened_bound,)).widened
+    widened_callback = VariableBoundsCallback(semi; bounds = (widened_bound,),
+                                              interval = 0)
+    @test widened_result.maximum ≈ 1.0 + 1.0e-8
+    @test widened_result.upper_violation ≈ 1.0e-8
+    @test widened_result.upper_violated
+    @test typeof(widened_callback.affect!.last_results) ===
+          typeof((widened = widened_result,))
 end
 
 @testitem "Unit: TimeSeriesCallback" setup=[Setup, UnitTests] tags=[:misc_part1] begin
