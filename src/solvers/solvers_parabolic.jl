@@ -34,14 +34,15 @@ not need to be specialized for `Gradient` and `Divergence`.
 
 `normal_direction` is not used in the BR1 flux,
 but is included as an argument for consistency with the [`ParabolicFormulationLocalDG`](@ref) flux,
-which does use the `normal_direction` to compute the LDG "switch" on the generally non-Cartesian [`P4estMesh`](@ref).
+which uses it to compute the LDG "switch" on meshes with arbitrary face normals, such as
+[`P4estMesh`](@ref) and [`DGMultiMesh`](@ref).
 """
 function flux_parabolic(u_ll, u_rr, # Version for `TreeMesh`
                         gradient_or_divergence, equations_parabolic,
                         parabolic_scheme::ParabolicFormulationBassiRebay1)
     return 0.5f0 * (u_ll + u_rr)
 end
-# Version for `P4estMesh`
+# Version for meshes with arbitrary face normals
 function flux_parabolic(u_ll, u_rr, normal_direction::AbstractVector,
                         gradient_or_divergence, equations_parabolic,
                         parabolic_scheme::ParabolicFormulationBassiRebay1)
@@ -54,8 +55,11 @@ end
 The local DG (LDG) flux from "The Local Discontinuous Galerkin Method for Time-Dependent
 Convection-Diffusion Systems" by Cockburn and Shu (1998).
 
-The parabolic "upwinding" vector is currently implemented for `TreeMesh`; for all other mesh types,
-the LDG solver is equivalent to [`ParabolicFormulationBassiRebay1`](@ref) with an LDG-type penalization.
+The parabolic "upwinding" vector is implemented for `TreeMesh`, `P4estMesh`, and `DGMultiMesh`.
+For meshes with arbitrary face normals, the dominant normal direction determines the LDG switch.
+`DGMultiMesh` discretizations with physical boundaries require a positive `penalty_parameter`;
+the zero-penalty constructor is not supported since the boundary treatment is not coercive
+without penalization.
 
 - Cockburn and Shu (1998).
   The Local Discontinuous Galerkin Method for Time-Dependent
@@ -74,12 +78,34 @@ Discontinuous Galerkin Method for Convection–Diffusion Problems" by Cockburn a
 This scheme corresponds to an LDG parabolic "upwinding/downwinding" but no LDG penalty parameter. 
 Cockburn and Dong proved that this scheme is still stable despite the zero penalty parameter. 
 
+This zero-penalty variant is not supported for [`DGMultiMesh`](@ref) discretizations with
+physical boundaries; use `ParabolicFormulationLocalDG(penalty_parameter)` with a positive
+penalty instead.
+
 - Cockburn and Dong (2007)  
   An Analysis of the Minimal Dissipation Local Discontinuous 
   Galerkin Method for Convection–Diffusion Problems.
   [DOI: 10.1007/s10915-007-9130-3](https://doi.org/10.1007/s10915-007-9130-3)
 """
 ParabolicFormulationLocalDG() = ParabolicFormulationLocalDG(nothing)
+
+@inline check_parabolic_solver(mesh, solver, parabolic_scheme) = nothing
+
+@inline parabolic_penalty_coefficient(parabolic_scheme) = 0
+@inline parabolic_penalty_coefficient(::ParabolicFormulationLocalDG{Nothing}) = 0
+@inline function parabolic_penalty_coefficient(dg::ParabolicFormulationLocalDG)
+    return abs(dg.penalty_parameter)
+end
+
+@inline function scale_boundary_flux(flux, surface_jacobian, operator_type,
+                                     boundary_condition, equations)
+    return flux
+end
+
+@inline function scale_boundary_flux(flux, surface_jacobian, ::Divergence,
+                                     ::BoundaryConditionNeumann, equations)
+    return flux * surface_jacobian
+end
 
 @doc raw"""
     flux_parabolic(u_ll, u_rr,
@@ -100,7 +126,8 @@ f_{\text{gradient}} = u_{L}
 ```
 on the Cartesian [`TreeMesh`](@ref).
 
-For the [`P4estMesh`](@ref), the `normal_direction` is used to compute the LDG "switch" ``\sigma`` for the upwinding.
+For [`P4estMesh`](@ref) and [`DGMultiMesh`](@ref), `normal_direction` is used to compute
+the LDG "switch" ``\sigma`` for the upwinding.
 This is realized by selecting the sign of the maximum (in absolute value sense) normal direction component,
 which corresponds to the "dominant" direction of the interface normal.
 ```math
@@ -118,7 +145,7 @@ function flux_parabolic(u_ll, u_rr, # Version for `TreeMesh`
     # and `u_rr` for the divergence. 
     return u_ll # Use the upwind value for the gradient interface flux
 end
-# Version for `P4estMesh`
+# Version for meshes with arbitrary face normals
 function flux_parabolic(u_ll, u_rr, normal_direction,
                         ::Gradient, equations_parabolic,
                         parabolic_scheme::ParabolicFormulationLocalDG)
@@ -148,7 +175,8 @@ f_{\text{divergence}} = u_{R}
 ```
 on the Cartesian [`TreeMesh`](@ref).
 
-For the [`P4estMesh`](@ref), the `normal_direction` is used to compute the LDG "switch" ``\sigma`` for the downwinding.
+For [`P4estMesh`](@ref) and [`DGMultiMesh`](@ref), `normal_direction` is used to compute
+the LDG "switch" ``\sigma`` for the downwinding.
 This is realized by selecting the sign of the maximum (in absolute value sense) normal direction component,
 which corresponds to the "dominant" direction of the interface normal.
 ```math
@@ -161,7 +189,7 @@ function flux_parabolic(u_ll, u_rr, # Version for `TreeMesh`
                         parabolic_scheme::ParabolicFormulationLocalDG)
     return u_rr # Use the downwind value for the divergence interface flux
 end
-# Version for `P4estMesh`
+# Version for meshes with arbitrary face normals
 function flux_parabolic(u_ll, u_rr, normal_direction,
                         ::Divergence, equations_parabolic,
                         parabolic_scheme::ParabolicFormulationLocalDG)

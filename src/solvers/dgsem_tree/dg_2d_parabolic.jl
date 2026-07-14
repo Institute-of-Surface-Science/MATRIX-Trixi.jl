@@ -50,7 +50,8 @@ function rhs_parabolic!(du, u, t, mesh::Union{TreeMesh{2}, TreeMesh{3}},
 
     # Compute and store the parabolic fluxes
     @trixi_timeit timer() "calculate parabolic fluxes" begin
-        calc_parabolic_fluxes!(flux_parabolic, gradients, u_transformed, mesh,
+        calc_parabolic_fluxes!(flux_parabolic, gradients, u_transformed, t, mesh,
+                               have_space_time_dependent_flux(equations_parabolic),
                                equations_parabolic, dg, cache)
     end
 
@@ -486,8 +487,16 @@ function prolong2boundaries!(cache, flux_parabolic::Tuple,
     return nothing
 end
 
-function calc_parabolic_fluxes!(flux_parabolic,
-                                gradients, u_transformed,
+@inline function calc_parabolic_fluxes!(flux_parabolic, gradients, u_transformed, t,
+                                        mesh::Union{TreeMesh{2}, P4estMesh{2}},
+                                        have_space_time_dependent_flux::False,
+                                        equations_parabolic::AbstractEquationsParabolic,
+                                        dg::DG, cache)
+    return calc_parabolic_fluxes!(flux_parabolic, gradients, u_transformed, mesh,
+                                  equations_parabolic, dg, cache)
+end
+
+function calc_parabolic_fluxes!(flux_parabolic, gradients, u_transformed,
                                 mesh::Union{TreeMesh{2}, P4estMesh{2}},
                                 equations_parabolic::AbstractEquationsParabolic,
                                 dg::DG, cache)
@@ -515,6 +524,41 @@ function calc_parabolic_fluxes!(flux_parabolic,
             set_node_vars!(flux_parabolic_y, flux_parabolic_node_y,
                            equations_parabolic, dg,
                            i, j, element)
+        end
+    end
+
+    return nothing
+end
+
+function calc_parabolic_fluxes!(flux_parabolic, gradients, u_transformed, t,
+                                mesh::Union{TreeMesh{2}, P4estMesh{2}},
+                                have_space_time_dependent_flux::True,
+                                equations_parabolic::AbstractEquationsParabolic,
+                                dg::DG, cache)
+    gradients_x, gradients_y = gradients
+    flux_parabolic_x, flux_parabolic_y = flux_parabolic
+    @unpack node_coordinates = cache.elements
+
+    @threaded for element in eachelement(dg, cache)
+        for j in eachnode(dg), i in eachnode(dg)
+            u_node = get_node_vars(u_transformed, equations_parabolic, dg,
+                                   i, j, element)
+            gradients_1_node = get_node_vars(gradients_x, equations_parabolic, dg,
+                                             i, j, element)
+            gradients_2_node = get_node_vars(gradients_y, equations_parabolic, dg,
+                                             i, j, element)
+            x_node = get_node_coords(node_coordinates, equations_parabolic, dg,
+                                     i, j, element)
+            gradients_node = (gradients_1_node, gradients_2_node)
+
+            flux_parabolic_node_x = flux(u_node, gradients_node, 1, x_node, t,
+                                         equations_parabolic)
+            flux_parabolic_node_y = flux(u_node, gradients_node, 2, x_node, t,
+                                         equations_parabolic)
+            set_node_vars!(flux_parabolic_x, flux_parabolic_node_x,
+                           equations_parabolic, dg, i, j, element)
+            set_node_vars!(flux_parabolic_y, flux_parabolic_node_y,
+                           equations_parabolic, dg, i, j, element)
         end
     end
 

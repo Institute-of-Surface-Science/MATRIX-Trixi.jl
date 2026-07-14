@@ -2,8 +2,83 @@
     EXAMPLES_DIR = examples_dir()
 end
 
+@testitem "Parabolic2D: TreeMesh componentwise diffusion RHS" setup=[
+    Setup,
+    Parabolic2D
+] tags=[:parabolic_part1] begin
+    equations = CompressibleEulerEquations2D(1.4)
+    equations_parabolic = LaplaceDiffusionComponentwise2D((0.1, 0.0, 0.0, 0.0),
+                                                          equations)
+    solver = DGSEM(polydeg = 2)
+    mesh = TreeMesh((0.0, 0.0), (1.0, 1.0), initial_refinement_level = 1,
+                    n_cells_max = 100, periodicity = true)
+    initial_condition = function (x, t, equations)
+        rho = 1.0 + 0.1 * sinpi(2 * x[1]) * sinpi(2 * x[2])
+        return SVector(rho, 0.0, 0.0, 1.0 / (equations.gamma - 1))
+    end
+
+    semi = SemidiscretizationHyperbolicParabolic(mesh, (equations, equations_parabolic),
+                                                 initial_condition, solver;
+                                                 solver_parabolic = ParabolicFormulationLocalDG(),
+                                                 boundary_conditions = (boundary_condition_periodic,
+                                                                        boundary_condition_periodic))
+    ode = semidiscretize(semi, (0.0, 0.01))
+    du = similar(ode.u0)
+    @test_nowarn Trixi.rhs_parabolic!(du, ode.u0, semi, 0.0)
+
+    du_wrapped = Trixi.wrap_array(du, semi)
+    @test maximum(abs, selectdim(du_wrapped, 1, 1)) > 1.0e-6
+    for variable in 2:nvariables(equations)
+        @test iszero(maximum(abs, selectdim(du_wrapped, 1, variable)))
+    end
+end
+
 @testitem "Parabolic2D: DGMulti 2D rhs_parabolic!" setup=[Setup, Parabolic2D] tags=[:parabolic_part1] begin
     using Trixi
+
+    struct SpaceTimeDiffusion2D{NVARS} <:
+           Trixi.AbstractEquationsParabolic{2, NVARS,
+                                            GradientVariablesConservative} end
+
+    struct ZeroSpeedEquation2D <: Trixi.AbstractEquations{2, 1} end
+    @inline Trixi.max_abs_speeds(u, ::ZeroSpeedEquation2D) = SVector(zero(eltype(u)),
+                                                                     zero(eltype(u)))
+
+    struct QuadraturePeakDiffusion2D <:
+           Trixi.AbstractEquationsParabolic{2, 1,
+                                            GradientVariablesConservative} end
+    struct UniformNonconstantDiffusion2D{T} <:
+           Trixi.AbstractEquationsParabolic{2, 1,
+                                            GradientVariablesConservative}
+        diffusivity::T
+    end
+
+    Trixi.varnames(::typeof(cons2cons), ::SpaceTimeDiffusion2D) = ("scalar",)
+    Trixi.varnames(::typeof(cons2prim), ::SpaceTimeDiffusion2D) = ("scalar",)
+    Trixi.varnames(::typeof(cons2entropy), ::SpaceTimeDiffusion2D) = ("scalar",)
+    @inline Trixi.cons2prim(u, ::SpaceTimeDiffusion2D) = u
+    @inline Trixi.cons2entropy(u, ::SpaceTimeDiffusion2D) = u
+
+    @inline function Trixi.flux(u, gradients, orientation::Integer, x, t,
+                                ::SpaceTimeDiffusion2D)
+        coefficient = 1 + x[1] + 2 * x[2] + t
+        return coefficient * gradients[orientation]
+    end
+    Trixi.have_space_time_dependent_flux(::SpaceTimeDiffusion2D) = Trixi.True()
+    Trixi.have_constant_diffusivity(::SpaceTimeDiffusion2D) = Trixi.False()
+    @inline Trixi.max_diffusivity(u, x, t, ::SpaceTimeDiffusion2D) = 1 + x[1] +
+                                                                     2 * x[2] + t
+    Trixi.have_constant_diffusivity(::QuadraturePeakDiffusion2D) = Trixi.False()
+    @inline Trixi.max_diffusivity(u, x, t, ::QuadraturePeakDiffusion2D) = 1 +
+                                                                          100 *
+                                                                          sinpi(2 *
+                                                                                x[1])^2 *
+                                                                          sinpi(2 *
+                                                                                x[2])^2
+    Trixi.have_constant_diffusivity(::UniformNonconstantDiffusion2D) = Trixi.False()
+    @inline Trixi.max_diffusivity(u, x, t,
+    equations::UniformNonconstantDiffusion2D) = equations.diffusivity
+
     dg = DGMulti(polydeg = 2, element_type = Quad(), approximation_type = Polynomial(),
                  surface_integral = SurfaceIntegralWeakForm(flux_central),
                  volume_integral = VolumeIntegralWeakForm())
@@ -30,6 +105,8 @@ end
     @test Base.real(semi) == Base.real(dg)
 
     ode = semidiscretize(semi, (0.0, 0.01))
+    @test_throws ArgumentError StepsizeCallback(cfl = 0.5,
+                                                cfl_parabolic = -0.05)(ode)
     u0 = similar(ode.u0)
     Trixi.compute_coefficients!(u0, 0.0, semi)
     @test u0 ≈ ode.u0
@@ -56,7 +133,8 @@ end
     @test getindex.(gradients[2], 1) ≈ xq .^ 2
 
     u_flux = similar.(gradients)
-    Trixi.calc_parabolic_fluxes!(u_flux, u0, gradients, mesh,
+    Trixi.calc_parabolic_fluxes!(u_flux, u0, gradients, t, mesh,
+                                 have_space_time_dependent_flux(equations_parabolic),
                                  equations_parabolic,
                                  dg, cache, cache_parabolic)
     @test u_flux[1] ≈ gradients[1]
@@ -69,6 +147,546 @@ end
                            dg, semi.solver_parabolic, cache, cache_parabolic)
     Trixi.invert_jacobian!(du, mesh, equations_parabolic, dg, cache; scaling = 1.0)
     @test getindex.(du, 1) ≈ 2 * y
+
+    equations_space_time = SpaceTimeDiffusion2D{1}()
+    flux_time = 0.3
+    Trixi.calc_parabolic_fluxes!(u_flux, u0, gradients, flux_time, mesh,
+                                 have_space_time_dependent_flux(equations_space_time),
+                                 equations_space_time,
+                                 dg, cache, cache_parabolic)
+    coefficient = @. 1 + xq + 2 * yq + flux_time
+    @test getindex.(u_flux[1], 1) ≈ coefficient .* getindex.(gradients[1], 1)
+    @test getindex.(u_flux[2], 1) ≈ coefficient .* getindex.(gradients[2], 1)
+
+    equations_stepsize = ZeroSpeedEquation2D()
+    dt_initial = Trixi.max_dt(u0, 0.0, mesh,
+                              have_constant_diffusivity(equations_space_time),
+                              equations_stepsize, equations_space_time, dg, cache)
+    dt_final = Trixi.max_dt(u0, flux_time, mesh,
+                            have_constant_diffusivity(equations_space_time),
+                            equations_stepsize, equations_space_time, dg, cache)
+    @test dt_final < dt_initial
+
+    semi_parabolic = SemidiscretizationParabolic(mesh, equations_space_time,
+                                                 initial_condition, dg;
+                                                 boundary_conditions = boundary_condition_periodic)
+    ode_parabolic = semidiscretize(semi_parabolic, (0.0, 0.01))
+    @test_throws ArgumentError StepsizeCallback()(ode_parabolic)
+    @test_throws ArgumentError StepsizeCallback(cfl_parabolic = -0.05)(ode_parabolic)
+    stepsize_callback = StepsizeCallback(cfl_parabolic = 0.05)
+    dt_parabolic = stepsize_callback(ode_parabolic)
+    @test isfinite(dt_parabolic)
+    @test dt_parabolic > 0
+    @test Trixi.calculate_dt(ode_parabolic.u0, first(ode_parabolic.tspan),
+                             1.0, 0.05, semi_parabolic) == dt_parabolic
+
+    equations_constant = LinearDiffusionEquation2D(0.1)
+    semi_constant = SemidiscretizationParabolic(mesh, equations_constant,
+                                                initial_condition, dg;
+                                                boundary_conditions = boundary_condition_periodic)
+    ode_constant = semidiscretize(semi_constant, (0.0, 0.01))
+    dt_constant = stepsize_callback(ode_constant)
+    @test isfinite(dt_constant)
+    @test dt_constant > 0
+
+    equations_peak = QuadraturePeakDiffusion2D()
+    diffusivity_solution_max = maximum(Trixi.max_diffusivity(u0[i, element],
+                                                             SVector(getindex.(mesh.md.xyz,
+                                                                               i,
+                                                                               element)),
+                                                             0.0, equations_peak)
+                                       for element in Trixi.eachelement(mesh, dg, cache),
+                                           i in Base.OneTo(dg.basis.Np))
+    diffusivity_quadrature_max = maximum(Trixi.max_diffusivity(u0[1, element],
+                                                               SVector(getindex.(mesh.md.xyzq,
+                                                                                 i,
+                                                                                 element)),
+                                                               0.0, equations_peak)
+                                         for element in Trixi.eachelement(mesh, dg,
+                                                                          cache),
+                                             i in Base.OneTo(dg.basis.Nq))
+    @test diffusivity_quadrature_max > diffusivity_solution_max
+
+    equations_uniform = UniformNonconstantDiffusion2D(diffusivity_quadrature_max)
+    dt_peak = Trixi.max_dt(u0, 0.0, mesh, Trixi.False(), equations_stepsize,
+                           equations_peak, dg, cache)
+    dt_uniform = Trixi.max_dt(u0, 0.0, mesh, Trixi.False(), equations_stepsize,
+                              equations_uniform, dg, cache)
+    @test dt_peak ≈ dt_uniform
+end
+
+@testitem "Parabolic2D: Spatially varying diffusivity provider" setup=[
+    Setup,
+    Parabolic2D
+] tags=[:parabolic_part1] begin
+    struct CustomConstantDiffusivity{T} <: AbstractDiffusivityCoefficient
+        value::T
+    end
+
+    Trixi.have_constant_diffusivity(::CustomConstantDiffusivity) = Trixi.True()
+    Trixi.have_space_time_dependent_flux(::CustomConstantDiffusivity) = Trixi.False()
+    Trixi.diffusivity_value(coefficient::CustomConstantDiffusivity, equations) = coefficient.value
+    Trixi.diffusivity_upper_bound(coefficient::CustomConstantDiffusivity) = coefficient.value
+    function Base.similar(coefficient::CustomConstantDiffusivity,
+                          ::Type{NewRealT}) where {NewRealT}
+        return CustomConstantDiffusivity(convert(NewRealT, coefficient.value))
+    end
+
+    struct CustomSpaceTimeDiffusivity <: AbstractDiffusivityCoefficient end
+
+    Trixi.have_constant_diffusivity(::CustomSpaceTimeDiffusivity) = Trixi.False()
+    Trixi.have_space_time_dependent_flux(::CustomSpaceTimeDiffusivity) = Trixi.True()
+    Trixi.diffusivity_value(::CustomSpaceTimeDiffusivity, x, t, equations) = one(eltype(x)) +
+                                                                             t
+    Trixi.diffusivity_upper_bound(::CustomSpaceTimeDiffusivity) = 2.0
+    Base.similar(::CustomSpaceTimeDiffusivity, ::Type{NewRealT}) where {NewRealT} = CustomSpaceTimeDiffusivity()
+
+    coefficient_function = (x, t, equations) -> one(eltype(x)) +
+                                                convert(eltype(x), 0.25) *
+                                                sinpi(x[1]) * sinpi(x[2])
+    coefficient = SpatiallyVaryingDiffusivity(coefficient_function, 1.25)
+    equations = LinearDiffusionEquation2D(coefficient)
+
+    @test Trixi.diffusivity_upper_bound(coefficient) == 1.25
+    @test have_constant_diffusivity(equations) == Trixi.False()
+    @test have_space_time_dependent_flux(equations) == Trixi.True()
+    @test max_diffusivity(SVector(1.0), SVector(0.0, 0.0), 0.0, equations) == 1.25
+    @test_throws ArgumentError SpatiallyVaryingDiffusivity(coefficient_function, 0.0)
+    @test_throws ArgumentError SpatiallyVaryingDiffusivity(coefficient_function, Inf)
+    @test_throws ArgumentError SpatiallyVaryingDiffusivity(coefficient_function, NaN)
+    @test_throws MethodError LinearDiffusionEquation2D("invalid")
+    @test_throws MethodError LinearDiffusionEquation2D([0.1])
+    @test_throws MethodError LinearDiffusionEquation2D(identity)
+
+    custom_constant_equations = LinearDiffusionEquation2D(CustomConstantDiffusivity(0.2))
+    @test have_constant_diffusivity(custom_constant_equations) == Trixi.True()
+    @test have_space_time_dependent_flux(custom_constant_equations) == Trixi.False()
+
+    custom_equations = LinearDiffusionEquation2D(CustomSpaceTimeDiffusivity())
+    @test have_constant_diffusivity(custom_equations) == Trixi.False()
+    @test have_space_time_dependent_flux(custom_equations) == Trixi.True()
+    @test max_diffusivity(SVector(1.0), SVector(0.0, 0.0), 0.5,
+                          custom_equations) == 2.0
+
+    x_left = SVector(-0.5, 0.5)
+    x_right = SVector(0.5, 0.5)
+    gradients = (SVector(2.0), SVector(-3.0))
+    @test flux(SVector(1.0), gradients, 1,
+               custom_constant_equations) == SVector(0.4)
+    @test flux(SVector(1.0), gradients, 1, x_left, 0.5,
+               custom_constant_equations) == SVector(0.4)
+    adapted_custom_constant = Trixi.trixi_adapt(Array, Float32,
+                                                custom_constant_equations)
+    @test adapted_custom_constant.diffusivity isa CustomConstantDiffusivity{Float32}
+    @test adapted_custom_constant.diffusivity.value == 0.2f0
+    @test flux(SVector(1.0), gradients, 1, x_left, 0.5,
+               custom_equations) == SVector(3.0)
+    coefficient_left = coefficient_function(x_left, 0.0, equations)
+    coefficient_right = coefficient_function(x_right, 0.0, equations)
+    @test coefficient_left == 0.75
+    @test coefficient_right == 1.25
+    for orientation in 1:2
+        flux_left = flux(SVector(1.0), gradients, orientation, x_left, 0.0,
+                         equations)
+        flux_right = flux(SVector(1.0), gradients, orientation, x_right, 0.0,
+                          equations)
+        @test flux_right[1] / flux_left[1] ≈ coefficient_right / coefficient_left
+    end
+    @test_throws ArgumentError flux(SVector(1.0), gradients, 1, equations)
+
+    time_coefficient = SpatiallyVaryingDiffusivity((x, t, equations) -> one(eltype(x)) +
+                                                                        t,
+                                                   2.0)
+    time_equations = LinearDiffusionEquation2D(time_coefficient)
+    @test flux(SVector(1.0), gradients, 1, x_left, 0.5,
+               time_equations) ≈ 1.5 * gradients[1]
+
+    equations_hyperbolic = LinearScalarAdvectionEquation2D(1.0, 1.0)
+    custom_equations_laplace = LaplaceDiffusion2D(CustomSpaceTimeDiffusivity(),
+                                                  equations_hyperbolic)
+    @test have_constant_diffusivity(custom_equations_laplace) == Trixi.False()
+    @test have_space_time_dependent_flux(custom_equations_laplace) == Trixi.True()
+    @test flux(SVector(1.0), gradients, 2, x_left, 0.5,
+               custom_equations_laplace) == SVector(-4.5)
+
+    custom_constant_equations_laplace = LaplaceDiffusion2D(CustomConstantDiffusivity(0.2),
+                                                           equations_hyperbolic)
+    @test flux(SVector(1.0), gradients, 2, x_left, 0.5,
+               custom_constant_equations_laplace) ≈ SVector(-0.6)
+
+    equations_laplace = LaplaceDiffusion2D(coefficient, equations_hyperbolic)
+    @test have_constant_diffusivity(equations_laplace) == Trixi.False()
+    @test have_space_time_dependent_flux(equations_laplace) == Trixi.True()
+    @test flux(SVector(1.0), gradients, 1, x_right, 0.0,
+               equations_laplace) ≈ SVector(coefficient_right * gradients[1])
+    @test_throws ArgumentError flux(SVector(1.0), gradients, 1, equations_laplace)
+
+    adapted = Trixi.trixi_adapt(Array, Float32, equations)
+    @test adapted.diffusivity isa SpatiallyVaryingDiffusivity{<:Any, Float32}
+    @test adapted.diffusivity.value_function === coefficient_function
+    @test adapted.diffusivity.upper_bound == 1.25f0
+    @test Trixi.diffusivity_value(adapted.diffusivity,
+                                  SVector(0.5f0, 0.5f0), 0.0f0,
+                                  adapted) isa Float32
+
+    solver = DGSEM(polydeg = 3)
+    mesh = TreeMesh((-1.0, -1.0), (1.0, 1.0);
+                    initial_refinement_level = 1,
+                    n_cells_max = 100,
+                    periodicity = true)
+    initial_condition = (x, t, equations) -> SVector(sinpi(x[1]) * sinpi(x[2]))
+    equations_constant = LinearDiffusionEquation2D(0.1)
+    @test equations_constant.diffusivity isa ConstantDiffusivity{Float64}
+    @test have_constant_diffusivity(equations_constant) == Trixi.True()
+    coefficient_constant = SpatiallyVaryingDiffusivity((x, t, equations) -> 0.1,
+                                                       0.1)
+    equations_variable_constant = LinearDiffusionEquation2D(coefficient_constant)
+
+    semi_constant = SemidiscretizationParabolic(mesh, equations_constant,
+                                                initial_condition, solver;
+                                                solver_parabolic = ParabolicFormulationBassiRebay1(),
+                                                boundary_conditions = boundary_condition_periodic)
+    semi_variable_constant = SemidiscretizationParabolic(mesh,
+                                                         equations_variable_constant,
+                                                         initial_condition, solver;
+                                                         solver_parabolic = ParabolicFormulationBassiRebay1(),
+                                                         boundary_conditions = boundary_condition_periodic)
+    ode_constant = semidiscretize(semi_constant, (0.0, 0.01))
+    ode_variable_constant = semidiscretize(semi_variable_constant, (0.0, 0.01))
+    du_constant = similar(ode_constant.u0)
+    du_variable_constant = similar(ode_variable_constant.u0)
+    Trixi.rhs_parabolic!(du_constant, ode_constant.u0, semi_constant, 0.0)
+    Trixi.rhs_parabolic!(du_variable_constant, ode_variable_constant.u0,
+                         semi_variable_constant, 0.0)
+
+    @test du_variable_constant≈du_constant atol=10 * eps() rtol=10 * eps()
+    stepsize_callback = StepsizeCallback(cfl_parabolic = 0.05)
+    @test stepsize_callback(ode_variable_constant) ≈ stepsize_callback(ode_constant)
+    @test_throws ArgumentError linear_structure(semi_variable_constant)
+end
+
+@testitem "Parabolic2D: DGMulti LDG diffusion core" setup=[
+    Setup,
+    Parabolic2D
+] tags=[:parabolic_part1] begin
+    using OrdinaryDiffEqLowStorageRK
+
+    struct VariablePenaltyDiffusion2D{F} <: Trixi.AbstractLaplaceDiffusion{2, 1}
+        diffusivity::F
+    end
+
+    Trixi.varnames(::typeof(cons2cons), ::VariablePenaltyDiffusion2D) = ("scalar",)
+    Trixi.varnames(::typeof(cons2prim), ::VariablePenaltyDiffusion2D) = ("scalar",)
+    Trixi.varnames(::typeof(cons2entropy), ::VariablePenaltyDiffusion2D) = ("scalar",)
+    Trixi.cons2prim(u, ::VariablePenaltyDiffusion2D) = u
+    Trixi.cons2entropy(u, ::VariablePenaltyDiffusion2D) = u
+    Trixi.have_constant_diffusivity(::VariablePenaltyDiffusion2D) = Trixi.False()
+    Trixi.have_space_time_dependent_flux(::VariablePenaltyDiffusion2D) = Trixi.True()
+    @inline function Trixi.max_diffusivity(u, x, t,
+                                           equations::VariablePenaltyDiffusion2D)
+        return equations.diffusivity(x, t)
+    end
+    @inline function Trixi.flux(u, gradients, orientation::Integer, x, t,
+                                equations::VariablePenaltyDiffusion2D)
+        return equations.diffusivity(x, t) * gradients[orientation]
+    end
+
+    dg = DGMulti(polydeg = 2, element_type = Quad(), approximation_type = Polynomial(),
+                 surface_integral = SurfaceIntegralWeakForm(flux_central),
+                 volume_integral = VolumeIntegralWeakForm())
+    equations = LinearDiffusionEquation2D(0.1)
+    initial_condition = (x, t, equations) -> SVector(sinpi(x[1]) * sinpi(x[2]))
+
+    periodic_mesh = DGMultiMesh(dg, (3, 3), periodicity = true)
+    semi = SemidiscretizationParabolic(periodic_mesh, equations, initial_condition, dg;
+                                       solver_parabolic = ParabolicFormulationLocalDG(1.0),
+                                       boundary_conditions = boundary_condition_periodic)
+    ode = semidiscretize(semi, (0.0, 0.01))
+    sol = solve(ode, RDPK3SpFSAL35(); abstol = 1.0e-9, reltol = 1.0e-9,
+                save_everystep = false)
+    @test Trixi.SciMLBase.successful_retcode(sol.retcode)
+    @test sum(abs2, sol.u[end]) < sum(abs2, sol.u[1])
+
+    # Diagonal triangular faces have equal-magnitude normal components. The LDG
+    # switch must still be opposite on both sides so periodic diffusion conserves mass.
+    dg_tri = DGMulti(polydeg = 2, element_type = Tri(),
+                     approximation_type = Polynomial(),
+                     surface_integral = SurfaceIntegralWeakForm(flux_central),
+                     volume_integral = VolumeIntegralWeakForm())
+    periodic_mesh_tri = DGMultiMesh(dg_tri, (2, 2), periodicity = true)
+    semi_tri = SemidiscretizationParabolic(periodic_mesh_tri, equations,
+                                           initial_condition, dg_tri;
+                                           solver_parabolic = ParabolicFormulationLocalDG(1.0),
+                                           boundary_conditions = boundary_condition_periodic)
+    ode_tri = semidiscretize(semi_tri, (0.0, 0.01))
+    u_tri = copy(ode_tri.u0)
+    du_tri = similar(u_tri)
+    Trixi.rhs_parabolic!(du_tri, u_tri, semi_tri, 0.0)
+    integrated_rhs_tri = Trixi.integrate(du_tri, semi_tri; normalize = false)
+    @test maximum(abs, integrated_rhs_tri) < 1.0e-12
+
+    constant_initial_condition = (x, t, equations) -> SVector(one(x[1]))
+    for parabolic_scheme in (ParabolicFormulationLocalDG(),
+                             ParabolicFormulationLocalDG(0.0))
+        semi_periodic = SemidiscretizationParabolic(periodic_mesh, equations,
+                                                    constant_initial_condition, dg;
+                                                    solver_parabolic = parabolic_scheme,
+                                                    boundary_conditions = boundary_condition_periodic)
+        ode_periodic = semidiscretize(semi_periodic, (0.0, 0.01))
+        du_periodic = similar(ode_periodic.u0)
+        @test_nowarn Trixi.rhs_parabolic!(du_periodic, ode_periodic.u0,
+                                          semi_periodic, 0.0)
+        @test maximum(abs, du_periodic) < 1.0e-11
+    end
+
+    penalty_parameter = 2.0
+    semi_stronger = remake(semi;
+                           solver_parabolic = ParabolicFormulationLocalDG(10 *
+                                                                          penalty_parameter))
+    semi_penalty = remake(semi;
+                          solver_parabolic = ParabolicFormulationLocalDG(penalty_parameter))
+    ode_stronger = semidiscretize(semi_stronger, (0.0, 0.01))
+    ode_penalty = semidiscretize(semi_penalty, (0.0, 0.01))
+    stepsize_callback = StepsizeCallback(cfl_parabolic = 1.0)
+    @test stepsize_callback(ode_stronger) < stepsize_callback(ode_penalty)
+
+    left(x, tol = 50 * eps()) = abs(x[1] + 1) < tol
+    right(x, tol = 50 * eps()) = abs(x[1] - 1) < tol
+    bottom(x, tol = 50 * eps()) = abs(x[2] + 1) < tol
+    top(x, tol = 50 * eps()) = abs(x[2] - 1) < tol
+    is_on_boundary = (; left, right, bottom, top)
+    physical_mesh = DGMultiMesh(dg, (2, 2); is_on_boundary)
+    boundary_value = (x, t, equations) -> initial_condition(x, t, equations)
+    dirichlet = BoundaryConditionDirichlet(boundary_value)
+    boundary_conditions = (; left = dirichlet, right = dirichlet,
+                           bottom = dirichlet, top = dirichlet)
+
+    variable_equations = VariablePenaltyDiffusion2D((x, t) -> 0.1 *
+                                                              (1 + x[1]^2 + t))
+    semi_variable = SemidiscretizationParabolic(physical_mesh, variable_equations,
+                                                initial_condition, dg;
+                                                solver_parabolic = ParabolicFormulationLocalDG(1.0),
+                                                boundary_conditions)
+    ode_variable = semidiscretize(semi_variable, (0.0, 0.01))
+    du_variable = similar(ode_variable.u0)
+    @test_nowarn Trixi.rhs_parabolic!(du_variable, ode_variable.u0,
+                                      semi_variable, 0.2)
+    @test all(isfinite, du_variable)
+
+    for parabolic_scheme in (ParabolicFormulationLocalDG(),
+                             ParabolicFormulationLocalDG(0.0),
+                             ParabolicFormulationLocalDG(-1.0))
+        @test_throws ArgumentError SemidiscretizationParabolic(physical_mesh, equations,
+                                                               initial_condition, dg;
+                                                               solver_parabolic = parabolic_scheme,
+                                                               boundary_conditions)
+    end
+
+    affine_initial_condition = (x, t, equations) -> SVector(x[1] + x[2])
+    normal_flux_negative = (x, t, equations) -> SVector(-max_diffusivity(equations))
+    normal_flux_positive = (x, t, equations) -> SVector(max_diffusivity(equations))
+    boundary_conditions_neumann = (;
+                                   left = BoundaryConditionNeumann(normal_flux_negative),
+                                   right = BoundaryConditionNeumann(normal_flux_positive),
+                                   bottom = BoundaryConditionNeumann(normal_flux_negative),
+                                   top = BoundaryConditionNeumann(normal_flux_positive))
+    for parabolic_scheme in (ParabolicFormulationBassiRebay1(),
+                             ParabolicFormulationLocalDG(1.0))
+        semi_neumann = SemidiscretizationParabolic(physical_mesh, equations,
+                                                   affine_initial_condition, dg;
+                                                   solver_parabolic = parabolic_scheme,
+                                                   boundary_conditions = boundary_conditions_neumann)
+        ode_neumann = semidiscretize(semi_neumann, (0.0, 0.01))
+        du_neumann = similar(ode_neumann.u0)
+        Trixi.rhs_parabolic!(du_neumann, ode_neumann.u0, semi_neumann, 0.0)
+        @test maximum(abs, du_neumann) < 1.0e-11
+    end
+
+    u_inner = SVector(1.0)
+    u_outer = SVector(2.0)
+    @test Trixi.penalty(u_outer, u_inner, 3.0, equations,
+                        ParabolicFormulationLocalDG(2.0)) ≈ SVector(0.6)
+    x_penalty = SVector(0.5, 0.0)
+    t_penalty = 0.2
+    expected_diffusivity = variable_equations.diffusivity(x_penalty, t_penalty)
+    @test Trixi.penalty(u_outer, u_inner, 3.0, x_penalty, t_penalty,
+                        variable_equations,
+                        ParabolicFormulationLocalDG(2.0)) ≈
+          SVector(6 * expected_diffusivity)
+
+    carrier = CompressibleEulerEquations2D(1.4)
+    equations_componentwise = LaplaceDiffusionComponentwise2D((0.1, 0.0, 0.0, 0.0),
+                                                              carrier)
+    jump_inner = SVector(1.0, 2.0, 3.0, 4.0)
+    jump_outer = SVector(2.0, 4.0, 6.0, 8.0)
+    componentwise_penalty = Trixi.penalty(jump_outer, jump_inner, 3.0,
+                                          equations_componentwise,
+                                          ParabolicFormulationLocalDG(2.0))
+    @test componentwise_penalty[1] ≈ 0.6
+    @test all(iszero, componentwise_penalty[2:end])
+end
+
+@testitem "Parabolic2D: Space- and time-dependent parabolic flux coordinates" setup=[
+    Setup,
+    Parabolic2D
+] tags=[:parabolic_part1] begin
+    using Trixi
+
+    struct SpaceTimeDiffusion2D{NVARS} <:
+           Trixi.AbstractEquationsParabolic{2, NVARS,
+                                            GradientVariablesConservative} end
+
+    @inline function Trixi.flux(u, gradients, orientation::Integer, x, t,
+                                ::SpaceTimeDiffusion2D)
+        coefficient = 1 + x[1] + 2 * x[2] + t
+        return coefficient * gradients[orientation]
+    end
+    Trixi.have_space_time_dependent_flux(::SpaceTimeDiffusion2D) = Trixi.True()
+    Trixi.have_constant_diffusivity(::SpaceTimeDiffusion2D) = Trixi.False()
+    @inline Trixi.max_diffusivity(u, x, t, ::SpaceTimeDiffusion2D) = 1 + x[1] +
+                                                                     2 * x[2] + t
+
+    function test_space_time_parabolic_flux_coordinates(mesh)
+        equations = LinearScalarAdvectionEquation2D(0.0, 0.0)
+        equations_parabolic = LaplaceDiffusion2D(1.0, equations)
+        solver = DGSEM(polydeg = 2)
+        initial_condition = (x, t, equations) -> SVector(sinpi(2 * x[1]) *
+                                                         sinpi(2 * x[2]))
+        semi = SemidiscretizationHyperbolicParabolic(mesh,
+                                                     (equations, equations_parabolic),
+                                                     initial_condition, solver;
+                                                     boundary_conditions = (boundary_condition_periodic,
+                                                                            boundary_condition_periodic))
+        ode = semidiscretize(semi, (0.0, 0.01))
+        du = similar(ode.u0)
+        Trixi.rhs_parabolic!(du, ode.u0, semi, 0.0)
+
+        (; u_transformed, gradients, flux_parabolic) = semi.cache_parabolic.parabolic_container
+        equations_space_time = SpaceTimeDiffusion2D{1}()
+        flux_time = 0.3
+        Trixi.calc_parabolic_fluxes!(flux_parabolic, gradients, u_transformed,
+                                     flux_time, mesh,
+                                     have_space_time_dependent_flux(equations_space_time),
+                                     equations_space_time, solver, semi.cache)
+
+        node_coordinates = semi.cache.elements.node_coordinates
+        for element in Trixi.eachelement(solver, semi.cache),
+            j in Trixi.eachnode(solver), i in Trixi.eachnode(solver)
+
+            x_node = Trixi.get_node_coords(node_coordinates, equations_space_time,
+                                           solver, i, j, element)
+            coefficient = 1 + x_node[1] + 2 * x_node[2] + flux_time
+            for orientation in 1:2
+                gradient_node = Trixi.get_node_vars(gradients[orientation],
+                                                    equations_space_time, solver,
+                                                    i, j, element)
+                flux_node = Trixi.get_node_vars(flux_parabolic[orientation],
+                                                equations_space_time, solver,
+                                                i, j, element)
+                @test flux_node ≈ coefficient * gradient_node
+            end
+        end
+
+        u = Trixi.wrap_array(ode.u0, semi)
+        dt_initial = Trixi.max_dt(u, 0.0, mesh,
+                                  have_constant_diffusivity(equations_space_time),
+                                  equations, equations_space_time, solver, semi.cache)
+        dt_final = Trixi.max_dt(u, flux_time, mesh,
+                                have_constant_diffusivity(equations_space_time),
+                                equations, equations_space_time, solver, semi.cache)
+        @test dt_final < dt_initial
+    end
+
+    tree_mesh = TreeMesh((0.0, 0.0), (1.0, 1.0),
+                         initial_refinement_level = 1,
+                         n_cells_max = 100,
+                         periodicity = true)
+    test_space_time_parabolic_flux_coordinates(tree_mesh)
+
+    p4est_mesh = P4estMesh((2, 2), polydeg = 2,
+                           coordinates_min = (0.0, 0.0),
+                           coordinates_max = (1.0, 1.0),
+                           periodicity = true)
+    test_space_time_parabolic_flux_coordinates(p4est_mesh)
+end
+
+@testitem "Parabolic2D: DGMulti tagged triangular diffusion" setup=[
+    Setup,
+    Parabolic2D
+] tags=[:parabolic_part1] begin
+    @test_trixi_include(joinpath(EXAMPLES_DIR, "dgmulti_2d",
+                                 "elixir_diffusion_triangulate_pkg_mesh.jl"),
+                        polydeg=2, mesh_size=0.45, tspan=(0.0, 0.05),
+                        l2=[0.000866366165081298],
+                        linf=[0.0053946772230686335])
+    @test Trixi.SciMLBase.successful_retcode(sol.retcode)
+    coarse_l2_error, coarse_linf_error = analysis_callback(sol)
+    @test all([0.00023559213035217064] .< coarse_l2_error)
+    @test all([0.001535851920118958] .< coarse_linf_error)
+    @test semi.solver_parabolic isa ParabolicFormulationLocalDG
+    @test semi.solver_parabolic.penalty_parameter > 0
+
+    expected_boundary_names = Set((:bottom, :right, :top, :left))
+    @test Set(keys(mesh.boundary_faces)) == expected_boundary_names
+    @test all(name -> !isempty(mesh.boundary_faces[name]), expected_boundary_names)
+
+    face_connectivity = vec(mesh.md.FToF)
+    all_boundary_faces = findall(face_connectivity .== eachindex(face_connectivity))
+    tagged_boundary_faces = sort!(vcat(values(mesh.boundary_faces)...))
+    @test tagged_boundary_faces == all_boundary_faces
+    @test allunique(tagged_boundary_faces)
+
+    function boundary_coordinate_values(mesh, solver, boundary_name,
+                                        coordinate_dimension)
+        number_of_faces = StartUpDG.num_faces(solver.basis.element_type)
+        points_per_face = solver.basis.Nfq ÷ number_of_faces
+        coordinate_values = Float64[]
+        for face_id in mesh.boundary_faces[boundary_name]
+            element_id = (face_id - 1) ÷ number_of_faces + 1
+            local_face = (face_id - 1) % number_of_faces
+            face_nodes = (local_face * points_per_face + 1):((local_face + 1) * points_per_face)
+            append!(coordinate_values,
+                    mesh.md.xyzf[coordinate_dimension][face_nodes, element_id])
+        end
+        return coordinate_values
+    end
+
+    coordinate_tolerance = 500 * eps(Float64)
+    @test all(value -> isapprox(value, -1.0; atol = coordinate_tolerance, rtol = 0.0),
+              boundary_coordinate_values(mesh, solver, :bottom, 2))
+    @test all(value -> isapprox(value, 1.0; atol = coordinate_tolerance, rtol = 0.0),
+              boundary_coordinate_values(mesh, solver, :right, 1))
+    @test all(value -> isapprox(value, 1.0; atol = coordinate_tolerance, rtol = 0.0),
+              boundary_coordinate_values(mesh, solver, :top, 2))
+    @test all(value -> isapprox(value, -1.0; atol = coordinate_tolerance, rtol = 0.0),
+              boundary_coordinate_values(mesh, solver, :left, 1))
+
+    steady_initial_condition = (x, t, equations) -> SVector(one(x[2]) + x[2])
+    semi_steady = SemidiscretizationParabolic(mesh, equations,
+                                              steady_initial_condition, solver;
+                                              solver_parabolic,
+                                              boundary_conditions)
+    ode_steady = semidiscretize(semi_steady, tspan)
+    du_steady = similar(ode_steady.u0)
+    Trixi.rhs_parabolic!(du_steady, ode_steady.u0, semi_steady, first(tspan))
+    @test maximum(abs, du_steady) < 1.0e-11
+
+    @test_allocations(Trixi.rhs_parabolic!, semi, sol, 1000)
+end
+
+@testitem "Parabolic2D: DGMulti tagged triangular diffusion refinement" setup=[
+    Setup,
+    Parabolic2D
+] tags=[:parabolic_part1] begin
+    @test_trixi_include(joinpath(EXAMPLES_DIR, "dgmulti_2d",
+                                 "elixir_diffusion_triangulate_pkg_mesh.jl"),
+                        polydeg=2, mesh_size=0.3, tspan=(0.0, 0.05),
+                        l2=[0.00023559213035217064],
+                        linf=[0.001535851920118958])
+    @test Trixi.SciMLBase.successful_retcode(sol.retcode)
+    fine_l2_error, fine_linf_error = analysis_callback(sol)
+    @test all(fine_l2_error .< [0.000866366165081298])
+    @test all(fine_linf_error .< [0.0053946772230686335])
 end
 
 @testitem "Parabolic2D: DGMulti: elixir_advection_diffusion.jl" setup=[Setup, Parabolic2D] tags=[:parabolic_part1] begin
@@ -845,6 +1463,42 @@ end
     @test_allocations(Trixi.rhs_parabolic!, semi, sol, 1000)
 end
 
+@testitem "Parabolic2D: P4estMesh2D: diffusion AMR flux conservation" setup=[
+    Setup,
+    Parabolic2D
+] tags=[:parabolic_part1] begin
+    @test_trixi_include(joinpath(EXAMPLES_DIR, "p4est_2d_dgsem",
+                                 "elixir_diffusion_amr_flux_conservation.jl"),
+                        l2=[0.022994760410297986],
+                        linf=[0.10346147528337513])
+
+    @test initial_ncells == 4
+    @test final_ncells > initial_ncells
+    @test final_nmortars > 0
+    @test final_ncells < 500
+
+    @test boundary_fluxes.x_neg≈expected_flux_x_neg atol=1.0e-11
+    @test boundary_fluxes.x_pos≈expected_flux_x_pos atol=1.0e-11
+    @test boundary_fluxes.y_neg≈expected_flux_y_neg atol=1.0e-11
+    @test boundary_fluxes.y_pos≈expected_flux_y_pos atol=1.0e-11
+    @test net_boundary_flux≈0.0 atol=1.0e-11
+
+    @test mass_rate≈net_boundary_flux atol=1.0e-10 rtol=1.0e-10
+    @test final_mass≈initial_mass atol=1.0e-10 rtol=1.0e-10
+
+    bounds_result = variable_bounds_callback(sol).scalar
+    expected_bounds_checks = 1 + sol.stats.naccept ÷ variable_bounds_interval +
+                             !iszero(sol.stats.naccept % variable_bounds_interval)
+    @test variable_bounds_callback.affect!.checks_performed == expected_bounds_checks
+    @test variable_bounds_callback.affect!.violations_detected == 0
+    @test bounds_result.finite_count == length(sol.u[end])
+    @test !isviolated(bounds_result)
+
+    # Ensure that we do not have excessive memory allocations
+    # (e.g., from type instabilities)
+    @test_allocations(Trixi.rhs_parabolic!, semi, sol, 1000)
+end
+
 @testitem "Parabolic2D: P4estMesh2D: elixir_advection_diffusion_nonperiodic_amr.jl" setup=[
     Setup,
     Parabolic2D
@@ -1561,6 +2215,74 @@ end
     # Ensure that we do not have excessive memory allocations
     # (e.g., from type instabilities)
     @test_allocations(Trixi.rhs!, semi, sol, 1000)
+    @test_allocations(Trixi.rhs_parabolic!, semi, sol, 1000)
+end
+
+@testitem "Parabolic2D: TreeMesh2D: elixir_diffusion_2d.jl" setup=[
+    Setup,
+    Parabolic2D
+] tags=[:parabolic_part1] begin
+    @test_trixi_include(joinpath(EXAMPLES_DIR, "tree_2d_dgsem",
+                                 "elixir_diffusion_2d.jl"),
+                        initial_refinement_level=2,
+                        l2=[0.0012719424527102708],
+                        linf=[0.004796263597208306])
+    @test Trixi.SciMLBase.successful_retcode(sol.retcode)
+    coarse_l2_error, coarse_linf_error = analysis_callback(sol)
+
+    @test_trixi_include(joinpath(EXAMPLES_DIR, "tree_2d_dgsem",
+                                 "elixir_diffusion_2d.jl"),
+                        initial_refinement_level=3,
+                        l2=[8.29287801975101e-5],
+                        linf=[0.000657824071300106])
+    @test Trixi.SciMLBase.successful_retcode(sol.retcode)
+    fine_l2_error, fine_linf_error = analysis_callback(sol)
+    @test all(fine_l2_error .< coarse_l2_error)
+    @test all(fine_linf_error .< coarse_linf_error)
+    @test_allocations(Trixi.rhs_parabolic!, semi, sol, 1000)
+end
+
+@testitem "Parabolic2D: TreeMesh2D: elixir_diffusion_spatially_varying_diffusivity.jl" setup=[
+    Setup,
+    Parabolic2D
+] tags=[:parabolic_part1] begin
+    @test_trixi_include(joinpath(EXAMPLES_DIR, "tree_2d_dgsem",
+                                 "elixir_diffusion_spatially_varying_diffusivity.jl"),
+                        initial_refinement_level=2,
+                        l2=[0.0019830194495154916],
+                        linf=[0.007670700094495438])
+    coarse_l2, coarse_linf = analysis_callback(sol)
+    x_float32 = SVector(0.25f0, 0.5f0)
+    u_float32 = initial_condition(x_float32, 0.1f0, equations)
+    gradients_float32 = (SVector(1.0f0), SVector(1.0f0))
+    @test @inferred(source_terms(u_float32, gradients_float32, x_float32, 0.1f0,
+                                 equations)) isa SVector{1, Float32}
+
+    @test_trixi_include(joinpath(EXAMPLES_DIR, "tree_2d_dgsem",
+                                 "elixir_diffusion_spatially_varying_diffusivity.jl"),
+                        initial_refinement_level=3,
+                        l2=[0.0002087372225728981],
+                        linf=[0.0009605379115259494])
+    medium_l2, medium_linf = analysis_callback(sol)
+
+    @test_trixi_include(joinpath(EXAMPLES_DIR, "tree_2d_dgsem",
+                                 "elixir_diffusion_spatially_varying_diffusivity.jl"),
+                        initial_refinement_level=4,
+                        l2=[2.6122940925001035e-5],
+                        linf=[0.00011865187653337106])
+    fine_l2, fine_linf = analysis_callback(sol)
+
+    @test all(medium_l2 .< coarse_l2)
+    @test all(fine_l2 .< medium_l2)
+    @test all(medium_linf .< coarse_linf)
+    @test all(fine_linf .< medium_linf)
+    l2_orders = (log2.(coarse_l2 ./ medium_l2),
+                 log2.(medium_l2 ./ fine_l2))
+    linf_orders = (log2.(coarse_linf ./ medium_linf),
+                   log2.(medium_linf ./ fine_linf))
+    @test all(order -> all(order .>= polydeg - 0.1), l2_orders)
+    @test all(order -> all(order .>= polydeg - 0.1), linf_orders)
+
     @test_allocations(Trixi.rhs_parabolic!, semi, sol, 1000)
 end
 

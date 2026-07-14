@@ -55,6 +55,7 @@ function SemidiscretizationParabolic(mesh, equations::AbstractEquationsParabolic
                                      # while `uEltype` is used as element type of solutions etc.
                                      RealT = real(solver), uEltype = RealT)
     @assert ndims(mesh) == ndims(equations)
+    check_parabolic_solver(mesh, solver, solver_parabolic)
 
     cache = create_cache(mesh, equations, solver, RealT, uEltype)
     _boundary_conditions = digest_boundary_conditions(boundary_conditions, mesh, solver,

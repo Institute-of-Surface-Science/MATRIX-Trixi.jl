@@ -2106,10 +2106,103 @@ end
                                                           operator_divergence,
                                                           equations_parabolic)) == RealT
 
+        prescribed_normal_flux = SVector(one(RealT))
+        boundary_condition_neumann_oriented = BoundaryConditionNeumann((x, t, equations) -> prescribed_normal_flux)
+        @test @inferred(boundary_condition_neumann_oriented(flux_inner, u_inner, 1, 1,
+                                                            x, t, operator_divergence,
+                                                            equations_parabolic)) ==
+              -prescribed_normal_flux
+        @test @inferred(boundary_condition_neumann_oriented(flux_inner, u_inner, 1, 2,
+                                                            x, t, operator_divergence,
+                                                            equations_parabolic)) ==
+              prescribed_normal_flux
+
         adapted = @inferred Trixi.trixi_adapt(Array, Float32, equations_parabolic)
         @test adapted isa LaplaceDiffusion1D
         @test typeof(adapted.diffusivity) == Float32
         @test adapted.equations_hyperbolic isa LinearScalarAdvectionEquation1D{Float32}
+    end
+end
+
+@testitem "Type stability: Zero Flux Equations 1D" setup=[
+    Setup,
+    TypeStability
+] tags=[:misc_part1] begin
+    equations = ZeroFluxEquations1D(2)
+    @test equations isa ZeroFluxEquations1D{2, Float64}
+    @test ndims(equations) == 1
+    @test nvariables(equations) == 2
+    @test have_constant_speed(equations) == Trixi.True()
+    @test Trixi.max_abs_speeds(equations) == SVector(0.0)
+    @test Trixi.varnames(cons2cons, equations) == ("scalar_1", "scalar_2")
+    @test ZeroFluxEquations1D(Int32(2)) isa ZeroFluxEquations1D{2, Float64}
+    @test ZeroFluxEquations1D(big(2)) isa ZeroFluxEquations1D{2, Float64}
+    @test ZeroFluxEquations1D(2; RealT = Float32) isa ZeroFluxEquations1D{2, Float32}
+    @test_throws ArgumentError ZeroFluxEquations1D(0)
+
+    for RealT in (Float32, Float64)
+        u = SVector(one(RealT), RealT(2))
+        @test iszero(@inferred flux(u, 1, equations))
+        @test iszero(@inferred max_abs_speed_naive(u, u, 1, equations))
+        @test @inferred(cons2prim(u, equations)) === u
+        @test @inferred(cons2entropy(u, equations)) === u
+        @test typeof(@inferred entropy(u, equations)) == RealT
+    end
+
+    adapted = @inferred Trixi.trixi_adapt(Array, Float32, equations)
+    @test adapted isa ZeroFluxEquations1D{2, Float32}
+end
+
+@testitem "Type stability: Laplace Diffusion Componentwise" setup=[
+    Setup,
+    TypeStability
+] tags=[:misc_part1] begin
+    for RealT in (Float32, Float64)
+        equations_1d = CompressibleEulerEquations1D(RealT(1.4))
+        equations_parabolic_1d = @inferred LaplaceDiffusionComponentwise1D((RealT(0.1),
+                                                                            zero(RealT),
+                                                                            RealT(2)),
+                                                                           equations_1d)
+        @test equations_parabolic_1d.diffusivity ==
+              SVector(RealT(0.1), zero(RealT), RealT(2))
+        @test_throws ArgumentError LaplaceDiffusionComponentwise1D((RealT(0.1),
+                                                                    zero(RealT)),
+                                                                   equations_1d)
+        gradients_1d = (SVector(RealT(4), RealT(5), RealT(6)),)
+        @test @inferred(flux(first(gradients_1d), gradients_1d, 1,
+                             equations_parabolic_1d)) ==
+              SVector(RealT(0.4), zero(RealT), RealT(12))
+        @test @inferred(max_diffusivity(equations_parabolic_1d)) == RealT(2)
+
+        equations_2d = CompressibleEulerEquations2D(RealT(1.4))
+        equations_parabolic_2d = LaplaceDiffusionComponentwise2D((RealT(0.1),
+                                                                  zero(RealT),
+                                                                  RealT(2),
+                                                                  RealT(0.5)),
+                                                                 equations_2d)
+        gradients_2d = (SVector(RealT(4), RealT(5), RealT(6), RealT(7)),
+                        SVector(RealT(7), RealT(8), RealT(9), RealT(10)))
+        @test @inferred(flux(first(gradients_2d), gradients_2d, 2,
+                             equations_parabolic_2d)) ≈
+              SVector(RealT(0.7), zero(RealT), RealT(18), RealT(5))
+
+        equations_3d = CompressibleEulerEquations3D(RealT(1.4))
+        equations_parabolic_3d = LaplaceDiffusionComponentwise3D((RealT(0.1),
+                                                                  zero(RealT),
+                                                                  RealT(2),
+                                                                  RealT(0.5),
+                                                                  RealT(0.25)),
+                                                                 equations_3d)
+        gradient_3d = SVector(RealT(1), RealT(2), RealT(3), RealT(4), RealT(5))
+        gradients_3d = (gradient_3d, gradient_3d, gradient_3d)
+        @test eltype(@inferred flux(gradient_3d, gradients_3d, 3,
+                                    equations_parabolic_3d)) == RealT
+
+        adapted = @inferred Trixi.trixi_adapt(Array, Float32,
+                                              equations_parabolic_1d)
+        @test adapted isa LaplaceDiffusionComponentwise{1}
+        @test eltype(adapted.diffusivity) == Float32
+        @test adapted.equations_hyperbolic isa CompressibleEulerEquations1D{Float32}
     end
 end
 
@@ -2120,17 +2213,51 @@ end
         equations_1d = LinearDiffusionEquation1D(RealT(0.1))
         @test eltype(@inferred cons2prim(u, equations_1d)) == RealT
         @test eltype(@inferred cons2entropy(u, equations_1d)) == RealT
+        @test have_space_time_dependent_flux(equations_1d) == Trixi.False()
+        gradients_1d = (SVector(one(RealT)),)
+        x = SVector(zero(RealT))
+        t = zero(RealT)
+        @test @inferred(flux(u, gradients_1d, 1, x, t, equations_1d)) ==
+              @inferred(flux(u, gradients_1d, 1, equations_1d))
 
         equations_2d = LinearDiffusionEquation2D(RealT(0.1))
         @test eltype(@inferred cons2prim(u, equations_2d)) == RealT
         @test eltype(@inferred cons2entropy(u, equations_2d)) == RealT
 
+        coefficient_2d = SpatiallyVaryingDiffusivity((x, t, equations) -> one(eltype(x)),
+                                                     one(RealT))
+        equations_variable_2d = LinearDiffusionEquation2D(coefficient_2d)
+        gradients_2d = (SVector(one(RealT)), SVector(RealT(2)))
+        x_2d = SVector(zero(RealT), zero(RealT))
+        @test @inferred(flux(u, gradients_2d, 1, x_2d, t,
+                             equations_variable_2d)) == SVector(one(RealT))
+        @test @inferred(max_diffusivity(u, x_2d, t,
+                                        equations_variable_2d)) == one(RealT)
+
+        equations_3d = LinearDiffusionEquation3D(RealT(0.1))
+        @test ndims(equations_3d) == 3
+        @test nvariables(equations_3d) == 1
+        @test max_diffusivity(equations_3d) == RealT(0.1)
+        @test eltype(@inferred cons2prim(u, equations_3d)) == RealT
+        @test eltype(@inferred cons2entropy(u, equations_3d)) == RealT
+        gradients = (one(RealT), RealT(2), RealT(3))
+        @test @inferred(flux(u, gradients, 1, equations_3d)) == SVector(RealT(0.1))
+        @test @inferred(flux(u, gradients, 2, equations_3d)) == SVector(RealT(0.2))
+        @test @inferred(flux(u, gradients, 3, equations_3d)) ≈ SVector(RealT(0.3))
+
         adapted_1d = @inferred Trixi.trixi_adapt(Array, Float32, equations_1d)
         @test adapted_1d isa LinearDiffusionEquation1D{Float32}
         @test typeof(adapted_1d.diffusivity) == Float32
         adapted_2d = @inferred Trixi.trixi_adapt(Array, Float32, equations_2d)
-        @test adapted_2d isa LinearDiffusionEquation2D{Float32}
-        @test typeof(adapted_2d.diffusivity) == Float32
+        @test adapted_2d isa LinearDiffusionEquation2D{ConstantDiffusivity{Float32}}
+        @test adapted_2d.diffusivity isa ConstantDiffusivity{Float32}
+        adapted_variable_2d = @inferred Trixi.trixi_adapt(Array, Float32,
+                                                          equations_variable_2d)
+        @test adapted_variable_2d.diffusivity isa SpatiallyVaryingDiffusivity{<:Any,
+                                          Float32}
+        adapted_3d = @inferred Trixi.trixi_adapt(Array, Float32, equations_3d)
+        @test adapted_3d isa LinearDiffusionEquation3D{Float32}
+        @test typeof(adapted_3d.diffusivity) == Float32
     end
 end
 
@@ -2216,7 +2343,7 @@ end
 
         adapted = @inferred Trixi.trixi_adapt(Array, Float32, equations_parabolic)
         @test adapted isa LaplaceDiffusion2D
-        @test typeof(adapted.diffusivity) == Float32
+        @test adapted.diffusivity isa ConstantDiffusivity{Float32}
         @test adapted.equations_hyperbolic isa LinearScalarAdvectionEquation2D{Float32}
     end
 end

@@ -2,6 +2,14 @@
 
 # Experimental support for parabolic diffusion terms is available in Trixi.jl.
 # This demo illustrates parabolic terms for the advection-diffusion equation.
+# For diffusion-dominated models, the recommended first check is the pure scalar
+# implicit workflow in `examples/tree_1d_dgsem/elixir_diffusion_ldg_implicit.jl`,
+# which combines [`SemidiscretizationParabolic`](@ref),
+# [`LinearDiffusionEquation1D`](@ref), and `TRBDF2` time integration.
+# For a generic stiff system with a diffusing and a non-diffusing variable, see
+# `examples/tree_1d_dgsem/elixir_reaction_diffusion_immobile_species_imex.jl`.
+# It places diffusion and local reaction terms in the implicit part of a split problem
+# and advances them with the IMEX method `KenCarp4`.
 
 using OrdinaryDiffEqLowStorageRK
 using Trixi
@@ -18,9 +26,25 @@ equations_hyperbolic = LinearScalarAdvectionEquation2D(advection_velocity);
 # Next, we define the parabolic diffusion term. The constructor requires knowledge of
 # `equations_hyperbolic` to be passed in because the [`LaplaceDiffusion2D`](@ref) applies
 # diffusion to every variable of the hyperbolic system.
+#
+# For multivariable systems where each component needs its own diffusivity, use
+# [`LaplaceDiffusionComponentwise1D`](@ref),
+# [`LaplaceDiffusionComponentwise2D`](@ref), or
+# [`LaplaceDiffusionComponentwise3D`](@ref). For example, given the three-variable
+# system `equations_hyperbolic_3var = CompressibleEulerEquations1D(1.4)`,
+# `LaplaceDiffusionComponentwise1D((0.1, 0.0, 0.0), equations_hyperbolic_3var)`
+# applies Laplace diffusion to the first component only. Components with zero diffusivity
+# are immobile with respect to the parabolic operator.
 
 diffusivity = 5.0e-2
 equations_parabolic = LaplaceDiffusion2D(diffusivity, equations_hyperbolic);
+
+# Smooth scalar coefficients depending on coordinates or time can be supplied with
+# [`SpatiallyVaryingDiffusivity`](@ref). Its callback is evaluated as
+# `value_function(x, t, equations)`. The required upper bound is used for explicit
+# parabolic timestep estimates and must bound every value reached during the simulation.
+# Spatially varying coefficients are still linear in the solution, but currently disable
+# `linear_structure` because the constant-diffusivity trait also controls that optimization.
 
 # ## Boundary conditions
 

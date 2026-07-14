@@ -5,6 +5,54 @@ Trixi.jl follows the interpretation of
 used in the Julia ecosystem. Notable changes will be documented in this file
 for human readability.
 
+## Changes in the MATRIX-Trixi.jl fork
+
+#### Added
+- Added `VariableBoundsCallback` for diagnostic monitoring of one-sided or two-sided
+  bounds on state components and derived scalar quantities, including tolerance-aware
+  violations, nonfinite detection, optional file output, MPI reductions, and termination
+  behavior
+  ([Institute-of-Surface-Science/MATRIX-Trixi.jl#12](https://github.com/Institute-of-Surface-Science/MATRIX-Trixi.jl/pull/12)).
+- Added `SpatiallyVaryingDiffusivity` for prescribed scalar isotropic diffusion
+  coefficients depending on coordinates and time, together with a manufactured 2D
+  convergence example
+  ([Institute-of-Surface-Science/MATRIX-Trixi.jl#11](https://github.com/Institute-of-Surface-Science/MATRIX-Trixi.jl/pull/11)).
+- Added a pure scalar diffusion example with dynamic nonconforming `P4estMesh` AMR,
+  post-AMR boundary-flux analysis, and mass-conservation checks. Prescribed 2D P4est
+  Neumann fluxes are now scaled by the physical surface Jacobian
+  ([Institute-of-Surface-Science/MATRIX-Trixi.jl#10](https://github.com/Institute-of-Surface-Science/MATRIX-Trixi.jl/pull/10)).
+- Added a DGMulti pure-diffusion example on a Triangulate.jl mesh, including conversion
+  of integer segment markers to symbolic Dirichlet and Neumann boundary names
+  ([Institute-of-Surface-Science/MATRIX-Trixi.jl#9](https://github.com/Institute-of-Surface-Science/MATRIX-Trixi.jl/pull/9)).
+- Added a complete local discontinuous Galerkin (LDG) parabolic formulation for
+  `DGMultiMesh`, including physical-boundary validation, boundary traces,
+  metric-scaled penalties, and penalty-aware timestep estimates
+  ([Institute-of-Surface-Science/MATRIX-Trixi.jl#8](https://github.com/Institute-of-Surface-Science/MATRIX-Trixi.jl/pull/8)).
+- Added `NormalParabolicFlux`, which can be used with `AnalysisSurfaceIntegral` and
+  `AnalysisCallback` to calculate the instantaneous normal parabolic flux through selected
+  boundaries of one-dimensional pure parabolic `TreeMesh` semidiscretizations
+  ([Institute-of-Surface-Science/MATRIX-Trixi.jl#7](https://github.com/Institute-of-Surface-Science/MATRIX-Trixi.jl/pull/7)).
+- Nonconstant parabolic timestep estimates may now depend on the solution, coordinates,
+  and time through `max_diffusivity(u, x, t, equations)`, including support in
+  `StepsizeCallback` for TreeMesh, P4est, and DGMulti discretizations
+  ([Institute-of-Surface-Science/MATRIX-Trixi.jl#6](https://github.com/Institute-of-Surface-Science/MATRIX-Trixi.jl/pull/6)).
+- Parabolic volume fluxes may now optionally depend on coordinates and time through
+  `flux(u, gradients, orientation, x, t, equations)`. Existing time-independent flux
+  implementations remain supported
+  ([Institute-of-Surface-Science/MATRIX-Trixi.jl#5](https://github.com/Institute-of-Surface-Science/MATRIX-Trixi.jl/pull/5)).
+- Added an implicit 1D scalar diffusion example using `SemidiscretizationParabolic`,
+  `LinearDiffusionEquation1D`, and `TRBDF2` time integration
+  ([Institute-of-Surface-Science/MATRIX-Trixi.jl#1](https://github.com/Institute-of-Surface-Science/MATRIX-Trixi.jl/pull/1)).
+- Added `LinearDiffusionEquation3D` for pure scalar diffusion/heat-equation simulations with `SemidiscretizationParabolic`,
+  together with transient 2D and 3D scalar diffusion examples using manufactured periodic solutions
+  ([Institute-of-Surface-Science/MATRIX-Trixi.jl#2](https://github.com/Institute-of-Surface-Science/MATRIX-Trixi.jl/pull/2)).
+- Added `LaplaceDiffusionComponentwise` for multivariable systems where each solution component can use its own scalar
+  Laplace diffusivity, including components with zero parabolic diffusion
+  ([Institute-of-Surface-Science/MATRIX-Trixi.jl#3](https://github.com/Institute-of-Surface-Science/MATRIX-Trixi.jl/pull/3)).
+- Added an IMEX reaction-diffusion example with one mobile and one immobile variable,
+  using `KenCarp4` and a stiff reversible exchange reaction
+  ([Institute-of-Surface-Science/MATRIX-Trixi.jl#4](https://github.com/Institute-of-Surface-Science/MATRIX-Trixi.jl/pull/4)).
+
 ## Changes in the v0.16 lifecycle
 
 #### Added

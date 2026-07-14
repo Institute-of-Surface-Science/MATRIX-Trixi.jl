@@ -212,6 +212,7 @@ export AcousticPerturbationEquations2D,
        IdealGlmMhdMultiIonEquations2D, IdealGlmMhdMultiIonEquations3D,
        HyperbolicDiffusionEquations1D, HyperbolicDiffusionEquations2D,
        HyperbolicDiffusionEquations3D,
+       ZeroFluxEquations1D,
        LinearScalarAdvectionEquation1D, LinearScalarAdvectionEquation2D,
        LinearScalarAdvectionEquation3D,
        InviscidBurgersEquation1D,
@@ -227,8 +228,10 @@ export NonIdealCompressibleEulerEquations1D, NonIdealCompressibleEulerEquations2
 export IdealGas, ThermallyPerfectGas9PolyFit,
        VanDerWaals, PengRobinson, HelmholtzIdealGas
 
-export LinearDiffusionEquation1D, LinearDiffusionEquation2D,
+export LinearDiffusionEquation1D, LinearDiffusionEquation2D, LinearDiffusionEquation3D,
        LaplaceDiffusion1D, LaplaceDiffusion2D, LaplaceDiffusion3D,
+       LaplaceDiffusionComponentwise, LaplaceDiffusionComponentwise1D,
+       LaplaceDiffusionComponentwise2D, LaplaceDiffusionComponentwise3D,
        LaplaceDiffusionEntropyVariables1D, LaplaceDiffusionEntropyVariables2D,
        LaplaceDiffusionEntropyVariables3D,
        CompressibleNavierStokesDiffusion1D, CompressibleNavierStokesDiffusion2D,
@@ -342,7 +345,9 @@ export SemidiscretizationHyperbolic, semidiscretize, compute_coefficients, integ
 export SemidiscretizationParabolic
 
 export SemidiscretizationHyperbolicParabolic
-export have_constant_diffusivity, max_diffusivity
+export have_constant_diffusivity, have_space_time_dependent_flux, max_diffusivity
+export AbstractDiffusivityCoefficient, ConstantDiffusivity,
+       SpatiallyVaryingDiffusivity
 
 export SemidiscretizationHyperbolicSplit
 
@@ -357,12 +362,14 @@ export SemidiscretizationEulerGravity, ParametersEulerGravity,
 export SemidiscretizationCoupled, SemidiscretizationCoupledP4est
 
 export SummaryCallback, SteadyStateCallback, AnalysisCallback, AliveCallback,
+       VariableBound, VariableBoundsResult, VariableBoundsCallback, isviolated,
        SaveRestartCallback, SaveSolutionCallback, TimeSeriesCallback, VisualizationCallback,
        AveragingCallback,
        AMRCallback, StepsizeCallback,
        GlmSpeedCallback, LBMCollisionCallback, EulerAcousticsCouplingCallback,
        TrivialCallback, AnalysisCallbackCoupled, AnalysisCallbackCoupledP4est,
-       AnalysisSurfaceIntegral, DragCoefficientPressure2D, LiftCoefficientPressure2D,
+       AnalysisSurfaceIntegral, NormalParabolicFlux,
+       DragCoefficientPressure2D, LiftCoefficientPressure2D,
        DragCoefficientShearStress2D, LiftCoefficientShearStress2D,
        DragCoefficientPressure3D, LiftCoefficientPressure3D
 

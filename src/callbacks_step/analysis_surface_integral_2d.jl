@@ -257,6 +257,45 @@ function analyze(surface_variable::AnalysisSurfaceIntegral, du, u, t,
     return surface_integral
 end
 
+function analyze(surface_variable::AnalysisSurfaceIntegral{Variable}, du, u, t,
+                 mesh::P4estMesh{2}, equations::AbstractEquationsParabolic,
+                 dg::DGSEM, cache,
+                 semi::SemidiscretizationParabolic) where {
+                                                           Component,
+                                                           Variable <:
+                                                           NormalParabolicFlux{Component}
+                                                           }
+    @unpack variable, boundary_symbols = surface_variable
+    @unpack boundaries = cache
+    @unpack surface_flux_values = cache.elements
+    @unpack weights = dg.basis
+
+    if !(1 <= Component <= nvariables(equations))
+        throw(ArgumentError("Requested parabolic flux component $Component, but " *
+                            "$(typeof(equations)) has $(nvariables(equations)) variable(s)"))
+    end
+
+    @unpack boundary_symbol_indices = semi.boundary_conditions
+    boundary_indices = get_boundary_indices(boundary_symbols, boundary_symbol_indices)
+
+    result = zero(eltype(u))
+    for boundary in boundary_indices
+        element = boundaries.neighbor_ids[boundary]
+        direction = indices2direction(boundaries.node_indices[boundary])
+        for node in eachnode(dg)
+            result += weights[node] *
+                      surface_flux_values[Component, node, direction, element]
+        end
+    end
+    result *= variable.factor
+
+    if mpi_isparallel()
+        result = MPI.Allreduce!(Ref(result), +, mpi_comm())[]
+    end
+
+    return result
+end
+
 # 2D version of the `analyze` function for `AnalysisSurfaceIntegral` of viscous, i.e.,
 # variables that require gradients of the solution variables.
 # These are for parabolic equations readily available.

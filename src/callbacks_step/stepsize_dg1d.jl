@@ -34,12 +34,15 @@ function max_dt(u, t, mesh::TreeMesh{1},
                 dg::DG, cache)
     # Avoid division by zero if the diffusivity vanishes everywhere
     max_scaled_diffusivity = nextfloat(zero(t))
+    @unpack node_coordinates = cache.elements
 
     @batch reduction=(max, max_scaled_diffusivity) for element in eachelement(dg, cache)
         max_diffusivity_ = zero(max_scaled_diffusivity)
         for i in eachnode(dg)
             u_node = get_node_vars(u, equations, dg, i, element)
-            diffusivity = max_diffusivity(u_node, equations_parabolic)
+            x_node = get_node_coords(node_coordinates, equations_parabolic, dg, i,
+                                     element)
+            diffusivity = max_diffusivity(u_node, x_node, t, equations_parabolic)
             max_diffusivity_ = Base.max(max_diffusivity_, diffusivity)
         end
         inv_jacobian = cache.elements.inverse_jacobian[element] # 2 / Δx
