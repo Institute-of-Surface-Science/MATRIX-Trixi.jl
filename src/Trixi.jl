@@ -15,6 +15,13 @@ See also: [trixi-framework/Trixi.jl](https://github.com/trixi-framework/Trixi.jl
 """
 module Trixi
 
+"""
+    MATRIX_TRIXI_API_VERSION
+
+Version of the public API added by the MATRIX-Trixi fork.
+"""
+const MATRIX_TRIXI_API_VERSION = v"1.0.0"
+
 using Preferences: @load_preference, set_preferences!
 const _PREFERENCE_SQRT = @load_preference("sqrt", "sqrt_Trixi_NaN")
 const _PREFERENCE_LOG = @load_preference("log", "log_Trixi_NaN")
@@ -201,6 +208,8 @@ include("visualization/visualization.jl")
 
 # export types/functions that define the public API of Trixi.jl
 
+export MATRIX_TRIXI_API_VERSION
+
 export AcousticPerturbationEquations2D,
        CompressibleEulerEquations1D, CompressibleEulerEquations2D,
        CompressibleEulerEquations3D,
@@ -307,7 +316,8 @@ export lake_at_rest_error
 export ncomponents, eachcomponent
 export have_constant_speed
 
-export TreeMesh, StructuredMesh, StructuredMeshView, UnstructuredMesh2D, P4estMesh,
+export TreeMesh, domain_bounds,
+       StructuredMesh, StructuredMeshView, UnstructuredMesh2D, P4estMesh,
        P4estMeshView, P4estMeshCubedSphere, T8codeMesh
 
 export DG,

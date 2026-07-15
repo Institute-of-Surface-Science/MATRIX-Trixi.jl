@@ -330,6 +330,21 @@ function total_volume(mesh::TreeMesh)
     return mesh.tree.length_level_0^ndims(mesh)
 end
 
+"""
+    domain_bounds(mesh::TreeMesh)
+
+Return `(coordinates_min, coordinates_max)` for the root domain of `mesh`. Each bound is
+an `NTuple` with one coordinate per spatial dimension.
+"""
+function domain_bounds(mesh::TreeMesh{NDIMS}) where {NDIMS}
+    center = mesh.tree.center_level_0
+    length = mesh.tree.length_level_0
+    half_length = length / oftype(length, 2)
+    coordinates_min = ntuple(dimension -> center[dimension] - half_length, Val(NDIMS))
+    coordinates_max = ntuple(dimension -> center[dimension] + half_length, Val(NDIMS))
+    return coordinates_min, coordinates_max
+end
+
 isperiodic(mesh::TreeMesh) = isperiodic(mesh.tree)
 isperiodic(mesh::TreeMesh, dimension) = isperiodic(mesh.tree, dimension)
 

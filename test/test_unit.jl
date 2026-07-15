@@ -161,6 +161,7 @@ end
 
                 @test @inferred(Trixi.ndims(mesh)) == ndims
                 @test @inferred(Trixi.ncells(mesh)) == (2^ndims)^ref_level
+                @test @inferred(domain_bounds(mesh)) == (coords_min, coords_max)
             end
         end
     end
