@@ -2211,6 +2211,7 @@ end
         u = SVector(one(RealT))
 
         equations_1d = LinearDiffusionEquation1D(RealT(0.1))
+        @test equations_1d.diffusivity isa ConstantDiffusivity{RealT}
         @test eltype(@inferred cons2prim(u, equations_1d)) == RealT
         @test eltype(@inferred cons2entropy(u, equations_1d)) == RealT
         @test have_space_time_dependent_flux(equations_1d) == Trixi.False()
@@ -2219,6 +2220,15 @@ end
         t = zero(RealT)
         @test @inferred(flux(u, gradients_1d, 1, x, t, equations_1d)) ==
               @inferred(flux(u, gradients_1d, 1, equations_1d))
+
+        coefficient_1d = SpatiallyVaryingDiffusivity((x, t, equations) -> one(eltype(x)) +
+                                                                             t,
+                                                     RealT(2))
+        equations_variable_1d = LinearDiffusionEquation1D(coefficient_1d)
+        @test @inferred(flux(u, gradients_1d, 1, x, t,
+                             equations_variable_1d)) == SVector(one(RealT))
+        @test @inferred(max_diffusivity(u, x, t,
+                                        equations_variable_1d)) == RealT(2)
 
         equations_2d = LinearDiffusionEquation2D(RealT(0.1))
         @test eltype(@inferred cons2prim(u, equations_2d)) == RealT
@@ -2246,8 +2256,8 @@ end
         @test @inferred(flux(u, gradients, 3, equations_3d)) ≈ SVector(RealT(0.3))
 
         adapted_1d = @inferred Trixi.trixi_adapt(Array, Float32, equations_1d)
-        @test adapted_1d isa LinearDiffusionEquation1D{Float32}
-        @test typeof(adapted_1d.diffusivity) == Float32
+        @test adapted_1d isa LinearDiffusionEquation1D{ConstantDiffusivity{Float32}}
+        @test adapted_1d.diffusivity isa ConstantDiffusivity{Float32}
         adapted_2d = @inferred Trixi.trixi_adapt(Array, Float32, equations_2d)
         @test adapted_2d isa LinearDiffusionEquation2D{ConstantDiffusivity{Float32}}
         @test adapted_2d.diffusivity isa ConstantDiffusivity{Float32}
