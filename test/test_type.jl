@@ -2207,6 +2207,17 @@ end
 end
 
 @testitem "Type stability: Linear Diffusion Equation" setup=[Setup, TypeStability] tags=[:misc_part1] begin
+    struct StateDependentDiffusivity <: AbstractDiffusivityCoefficient end
+
+    Trixi.have_constant_diffusivity(::StateDependentDiffusivity) = Trixi.False()
+    Trixi.have_space_time_dependent_flux(::StateDependentDiffusivity) = Trixi.True()
+    Trixi.diffusivity_value(::StateDependentDiffusivity, u, x, t, equations) = only(u)
+    Trixi.diffusivity_upper_bound(::StateDependentDiffusivity) = 2.0
+    function Base.similar(::StateDependentDiffusivity,
+                          ::Type{NewRealT}) where {NewRealT}
+        return StateDependentDiffusivity()
+    end
+
     for RealT in (Float32, Float64)
         u = SVector(one(RealT))
 
@@ -2229,6 +2240,10 @@ end
                              equations_variable_1d)) == SVector(one(RealT))
         @test @inferred(max_diffusivity(u, x, t,
                                         equations_variable_1d)) == RealT(2)
+
+        equations_state_dependent_1d = LinearDiffusionEquation1D(StateDependentDiffusivity())
+        @test @inferred(flux(SVector(RealT(2)), gradients_1d, 1, x, t,
+                             equations_state_dependent_1d)) == SVector(RealT(2))
 
         equations_2d = LinearDiffusionEquation2D(RealT(0.1))
         @test eltype(@inferred cons2prim(u, equations_2d)) == RealT

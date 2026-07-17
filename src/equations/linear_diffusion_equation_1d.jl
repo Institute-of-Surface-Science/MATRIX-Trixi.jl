@@ -91,7 +91,7 @@ end
 
 @inline function flux(u, gradients, orientation::Integer, x, t, ::True,
                       equations::LinearDiffusionEquation1D)
-    diffusivity = diffusivity_value(equations.diffusivity, x, t, equations)
+    diffusivity = diffusivity_value(equations.diffusivity, u, x, t, equations)
     dudx, = gradients
     return SVector(diffusivity * dudx)
 end
