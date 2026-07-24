@@ -12,7 +12,7 @@ for human readability.
   nodal bounds limiter for DGSEM solutions in one, two, and three dimensions. It can be
   used as an OrdinaryDiffEq stage or step limiter, including with implicit `TRBDF2`
   integration of local-DG parabolic diffusion
-  ([HydrogenTrapDiffusion.jl#44](https://github.com/Institute-of-Surface-Science/HydrogenTrapDiffusion.jl/issues/44)).
+  ([Institute-of-Surface-Science/MATRIX-Trixi.jl#14](https://github.com/Institute-of-Surface-Science/MATRIX-Trixi.jl/pull/14)).
 - Added `VariableBoundsCallback` for diagnostic monitoring of one-sided or two-sided
   bounds on state components and derived scalar quantities, including tolerance-aware
   violations, nonfinite detection, optional file output, MPI reductions, and termination
