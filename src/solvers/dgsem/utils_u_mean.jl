@@ -6,8 +6,8 @@
 #! format: noindent
 
 # `compute_u_mean` is used in:
-# (Stage-) Callbacks `EntropyBoundedLimiter`, `PositivityPreservingLimiterZhangShu`, and
-# `PositivityPreservingLimiterLiuZhang`. 
+# (Stage-) Callbacks `EntropyBoundedLimiter`, `PositivityPreservingLimiterZhangShu`,
+# `BoundsPreservingLimiterZhangShu`, and `PositivityPreservingLimiterLiuZhang`.
 # `set_u_mean!` is used in `PositivityPreservingLimiterLiuZhang`.
 
 # positional arguments `mesh` and `cache` passed in to match signature of 2D/3D functions

@@ -950,6 +950,58 @@ end
     @test_allocations(Trixi.rhs_parabolic!, semi, sol, 1000)
 end
 
+@testitem "Parabolic1D: BoundsPreservingLimiterZhangShu perfect sink" setup=[
+    Setup,
+    Parabolic1D
+] tags=[:parabolic_part1] begin
+    elixir = joinpath(EXAMPLES_DIR, "tree_1d_dgsem",
+                      "elixir_diffusion_perfect_sink_limiter.jl")
+
+    trixi_include(@__MODULE__, elixir, tspan = (0.0, 0.001))
+    @test Trixi.SciMLBase.successful_retcode(sol.retcode)
+    limited_result = variable_bounds_callback(sol).concentration
+    @test !isviolated(limited_result)
+    @test limited_result.minimum >= -1.0e-12
+    @test limited_result.maximum <= 1.0 + 1.0e-12
+    @test variable_bounds_callback.affect!.violations_detected == 0
+    @test variable_bounds_callback.affect!.checks_performed == sol.stats.naccept + 1
+
+    no_limiter! = (u, integrator, semi, t) -> nothing
+    trixi_include(@__MODULE__, elixir, tspan = (0.0, 0.001), limiter! = no_limiter!)
+    @test Trixi.SciMLBase.successful_retcode(sol.retcode)
+    @test variable_bounds_callback.affect!.violations_detected > 0
+    @test variable_bounds_callback.affect!.worst_lower_violation[1] > 1.0e-3
+    @test variable_bounds_callback.affect!.worst_upper_violation[1] > 1.0e-3
+end
+
+@testitem "Parabolic1D: BoundsPreservingLimiterZhangShu smooth convergence" setup=[
+    Setup,
+    Parabolic1D
+] tags=[:parabolic_part1] begin
+    using ADTypes: AutoFiniteDiff
+    using OrdinaryDiffEqSDIRK: TRBDF2
+
+    smooth_variable(u, equations) = u[1]
+    limiter! = BoundsPreservingLimiterZhangShu(lower = (0.0,), upper = (1.0,),
+                                               variables = (smooth_variable,))
+    algorithm = TRBDF2(; autodiff = AutoFiniteDiff(), step_limiter! = limiter!)
+    elixir = joinpath(EXAMPLES_DIR, "tree_1d_dgsem",
+                      "elixir_diffusion_ldg_implicit.jl")
+
+    trixi_include(@__MODULE__, elixir,
+                  initial_refinement_level = 3, algorithm = algorithm)
+    @test Trixi.SciMLBase.successful_retcode(sol.retcode)
+    coarse_l2_error, coarse_linf_error = analysis_callback(sol)
+
+    trixi_include(@__MODULE__, elixir,
+                  initial_refinement_level = 4, algorithm = algorithm)
+    @test Trixi.SciMLBase.successful_retcode(sol.retcode)
+    fine_l2_error, fine_linf_error = analysis_callback(sol)
+
+    @test all(fine_l2_error .< coarse_l2_error / 4)
+    @test all(fine_linf_error .< coarse_linf_error / 4)
+end
+
 @testitem "Parabolic1D: VariableBoundsCallback" setup=[Setup, Parabolic1D] tags=[
     :parabolic_part1
 ] begin

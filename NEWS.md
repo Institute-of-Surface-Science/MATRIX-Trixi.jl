@@ -8,6 +8,11 @@ for human readability.
 ## Changes in the MATRIX-Trixi.jl fork
 
 #### Added
+- Added `BoundsPreservingLimiterZhangShu`, a conservative one-sided or two-sided
+  nodal bounds limiter for DGSEM solutions in one, two, and three dimensions. It can be
+  used as an OrdinaryDiffEq stage or step limiter, including with implicit `TRBDF2`
+  integration of local-DG parabolic diffusion
+  ([HydrogenTrapDiffusion.jl#44](https://github.com/Institute-of-Surface-Science/HydrogenTrapDiffusion.jl/issues/44)).
 - Added `VariableBoundsCallback` for diagnostic monitoring of one-sided or two-sided
   bounds on state components and derived scalar quantities, including tolerance-aware
   violations, nonfinite detection, optional file output, MPI reductions, and termination
