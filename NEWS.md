@@ -10,8 +10,8 @@ for human readability.
 #### Added
 - Added `BoundsPreservingLimiterZhangShu`, a conservative one-sided or two-sided
   nodal bounds limiter for DGSEM solutions in one, two, and three dimensions. It can be
-  used as an OrdinaryDiffEq stage or step limiter, including with implicit `TRBDF2`
-  integration of local-DG parabolic diffusion
+  used as an OrdinaryDiffEq stage limiter or solve-level step limiter, including with
+  adaptive implicit `TRBDF2` integration of local-DG parabolic diffusion
   ([Institute-of-Surface-Science/MATRIX-Trixi.jl#14](https://github.com/Institute-of-Surface-Science/MATRIX-Trixi.jl/pull/14)).
 - Added `VariableBoundsCallback` for diagnostic monitoring of one-sided or two-sided
   bounds on state components and derived scalar quantities, including tolerance-aware

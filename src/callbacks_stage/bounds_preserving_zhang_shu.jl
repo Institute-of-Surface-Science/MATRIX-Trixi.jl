@@ -25,8 +25,10 @@ or when suitable convexity or concavity assumptions hold. If the value at an ele
 is outside its bounds, the element is collapsed to that mean to preserve conservation; a
 [`VariableBoundsCallback`](@ref) can be used to diagnose the remaining violation.
 
-Use this limiter as `step_limiter!` with implicit OrdinaryDiffEq algorithms such as
-`TRBDF2`, or as `stage_limiter!` with compatible explicit Runge-Kutta algorithms.
+Pass this limiter as the solve-level `step_limiter` with implicit OrdinaryDiffEq
+algorithms such as `TRBDF2`, or as `stage_limiter` with compatible explicit Runge-Kutta
+algorithms. The per-algorithm `step_limiter!` and `stage_limiter!` fields are deprecated
+compatibility syntax.
 """
 struct BoundsPreservingLimiterZhangShu{N, Lower, Upper, Variables}
     lower::Lower

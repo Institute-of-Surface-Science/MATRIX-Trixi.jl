@@ -56,8 +56,10 @@ callbacks = CallbackSet(summary_callback, variable_bounds_callback)
 # run the simulation
 
 time_int_tol = 1.0e-10
-algorithm = TRBDF2(; autodiff = AutoFiniteDiff(), step_limiter! = limiter!)
+algorithm = TRBDF2(; autodiff = AutoFiniteDiff())
+adaptive = true
 sol = solve(ode, algorithm;
             abstol = time_int_tol, reltol = time_int_tol,
-            dt = 1.0e-3, save_everystep = false,
-            ode_default_options()..., callback = callbacks)
+            dt = 1.0e-3, adaptive = adaptive,
+            ode_default_options()..., callback = callbacks,
+            step_limiter = limiter!)

@@ -204,13 +204,28 @@ concentration(u, equations) = u[1]
 limiter! = BoundsPreservingLimiterZhangShu(lower = (0.0,),
                                            upper = (1.0,),
                                            variables = (concentration,))
-algorithm = TRBDF2(; autodiff = AutoFiniteDiff(), step_limiter! = limiter!)
+algorithm = TRBDF2(; autodiff = AutoFiniteDiff())
+
+sol = solve(ode, algorithm;
+            adaptive = true,
+            step_limiter = limiter!)
 ```
 The tuples may contain `nothing` for unused sides. The limiter scales each element's
 nodal states towards its mean, so it cannot repair a mean that is itself outside the
 configured interval without sacrificing conservation. Use [`VariableBoundsCallback`](@ref)
 independently to verify accepted states and diagnose this case. Bounds hold up to
 floating-point roundoff; configure the diagnostic tolerance accordingly.
+
+OrdinaryDiffEq forms an adaptive method's embedded error estimate before applying the
+solve-level `step_limiter`. For each element, this limiter subsequently replaces every
+nodal state ``u_i`` by ``\bar{u} + \theta (u_i - \bar{u})`` with
+``0 \leq \theta \leq 1``. It therefore preserves the element mean and cannot increase
+nodal deviations from that mean. The adaptive tolerances control the underlying
+unprojected time-integration step, while [`VariableBoundsCallback`](@ref) independently
+checks the accepted, limited states. OrdinaryDiffEq automatically refreshes FSAL
+derivatives after a nontrivial solve-level limiter. Passing `step_limiter!` to an
+algorithm constructor is deprecated compatibility syntax; prefer the solve-level
+`step_limiter` keyword.
 
 OrdinaryDiffEq dense-output values at `saveat` times between accepted steps are
 interpolants and are not passed through the limiter. If saved states must satisfy the
