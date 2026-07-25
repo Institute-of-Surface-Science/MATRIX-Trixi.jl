@@ -1436,10 +1436,11 @@ end
     Setup,
     UnitTests
 ] tags=[:misc_part1] begin
+    import Trixi
     using Trixi: BoundsPreservingLimiterZhangShu, DGSEM,
                  LinearScalarAdvectionEquation1D, LinearScalarAdvectionEquation2D,
                  LinearScalarAdvectionEquation3D, SemidiscretizationHyperbolic, SVector,
-                 TreeMesh, boundary_condition_periodic
+                 StructuredMesh, TreeMesh, boundary_condition_periodic
 
     scalar(u, equations) = u[1]
 
@@ -1546,6 +1547,32 @@ end
             @test all(isapprox(u[1, i, element], mean[1]) for i in axes(u, 2))
         end
     end
+
+    curved_mapping(xi) = (xi + 2)^2
+    equations = LinearScalarAdvectionEquation1D(1.0)
+    mesh = StructuredMesh((1,), curved_mapping; periodicity = true)
+    solver = DGSEM(polydeg = 2)
+    initial_condition = (x, t, equations) -> SVector(0.5)
+    semi = SemidiscretizationHyperbolic(mesh, equations, initial_condition, solver;
+                                        boundary_conditions = boundary_condition_periodic)
+    u_ode = Trixi.compute_coefficients(0.0, semi)
+    u = Trixi.wrap_array(u_ode, semi)
+    curved_pattern = (-0.25, 0.5, 1.25)
+    for i in axes(u, 2)
+        u[1, i, 1] = curved_pattern[i]
+    end
+
+    curved_mean = Trixi.compute_u_mean(u, 1,
+                                       Trixi.mesh_equations_solver_cache(semi)...)
+    @test only(curved_mean) ≈ 0.625
+    physical_mass_before = Trixi.integrate(u_ode, semi; normalize = false)
+    Trixi.limiter_bounds_preserving_zhang_shu!(u, (0.0,), (1.0,), (scalar,),
+                                               Trixi.mesh_equations_solver_cache(semi)...)
+    physical_mass_after = Trixi.integrate(u_ode, semi; normalize = false)
+
+    @test minimum(u) >= -100 * eps()
+    @test maximum(u) <= 1.0 + 100 * eps()
+    @test physical_mass_after ≈ physical_mass_before
 end
 
 @testitem "Unit: TimeSeriesCallback" setup=[Setup, UnitTests] tags=[:misc_part1] begin
