@@ -59,6 +59,11 @@ callbacks = CallbackSet(summary_callback, analysis_callback, alive_callback)
 # The implicit TRBDF2 method removes the parabolic time-step restriction of explicit schemes.
 time_int_tol = 1.0e-10
 algorithm = TRBDF2(; autodiff = AutoFiniteDiff())
+adaptive = true
+step_limiter = nothing
+limiter_options = isnothing(step_limiter) ? (;) : (; step_limiter)
 sol = solve(ode, algorithm;
             abstol = time_int_tol, reltol = time_int_tol,
-            dt = 1.0e-2, ode_default_options()..., callback = callbacks)
+            dt = 1.0e-2, adaptive = adaptive,
+            ode_default_options()..., callback = callbacks,
+            limiter_options...)

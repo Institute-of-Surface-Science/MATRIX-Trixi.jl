@@ -957,7 +957,7 @@ end
     elixir = joinpath(EXAMPLES_DIR, "tree_1d_dgsem",
                       "elixir_diffusion_perfect_sink_limiter.jl")
 
-    trixi_include(@__MODULE__, elixir, tspan = (0.0, 0.001))
+    trixi_include(@__MODULE__, elixir, tspan = (0.0, 0.002))
     @test Trixi.SciMLBase.successful_retcode(sol.retcode)
     limited_result = variable_bounds_callback(sol).concentration
     @test !isviolated(limited_result)
@@ -965,6 +965,18 @@ end
     @test limited_result.maximum <= 1.0 + 1.0e-12
     @test variable_bounds_callback.affect!.violations_detected == 0
     @test variable_bounds_callback.affect!.checks_performed == sol.stats.naccept + 1
+
+    integrator = Trixi.init(ode, algorithm;
+                            abstol = time_int_tol, reltol = time_int_tol,
+                            dt = 1.0e-3, adaptive = true,
+                            step_limiter = limiter!,
+                            Trixi.ode_default_options()...)
+    Trixi.step!(integrator)
+    Trixi.step!(integrator)
+    expected_fsalfirst = similar(integrator.fsalfirst)
+    integrator.f(expected_fsalfirst, integrator.uprev, integrator.p,
+                 integrator.tprev)
+    @test integrator.fsalfirst ≈ expected_fsalfirst
 
     no_limiter! = (u, integrator, semi, t) -> nothing
     trixi_include(@__MODULE__, elixir, tspan = (0.0, 0.001), limiter! = no_limiter!)
@@ -980,26 +992,57 @@ end
 ] tags=[:parabolic_part1] begin
     using ADTypes: AutoFiniteDiff
     using OrdinaryDiffEqSDIRK: TRBDF2
+    import Trixi
+    using Trixi: BoundsPreservingLimiterZhangShu, trixi_include
 
     smooth_variable(u, equations) = u[1]
     limiter! = BoundsPreservingLimiterZhangShu(lower = (0.0,), upper = (1.0,),
                                                variables = (smooth_variable,))
-    algorithm = TRBDF2(; autodiff = AutoFiniteDiff(), step_limiter! = limiter!)
+    algorithm = TRBDF2(; autodiff = AutoFiniteDiff())
     elixir = joinpath(EXAMPLES_DIR, "tree_1d_dgsem",
                       "elixir_diffusion_ldg_implicit.jl")
 
     trixi_include(@__MODULE__, elixir,
-                  initial_refinement_level = 3, algorithm = algorithm)
+                  initial_refinement_level = 3, tspan = (0.0, 0.1),
+                  algorithm = algorithm, callbacks = nothing,
+                  dt = 1.0e-3, adaptive = true, step_limiter = limiter!)
     @test Trixi.SciMLBase.successful_retcode(sol.retcode)
     coarse_l2_error, coarse_linf_error = analysis_callback(sol)
 
     trixi_include(@__MODULE__, elixir,
-                  initial_refinement_level = 4, algorithm = algorithm)
+                  initial_refinement_level = 4, tspan = (0.0, 0.1),
+                  algorithm = algorithm, callbacks = nothing,
+                  dt = 1.0e-3, adaptive = true, step_limiter = limiter!)
     @test Trixi.SciMLBase.successful_retcode(sol.retcode)
     fine_l2_error, fine_linf_error = analysis_callback(sol)
 
     @test all(fine_l2_error .< coarse_l2_error / 4)
     @test all(fine_linf_error .< coarse_linf_error / 4)
+
+    trixi_include(@__MODULE__, elixir,
+                  initial_refinement_level = 3, tspan = (0.0, 0.1),
+                  algorithm = algorithm, callbacks = nothing,
+                  dt = 1.0e-3, adaptive = true, step_limiter = nothing)
+    @test Trixi.SciMLBase.successful_retcode(sol.retcode)
+    unlimited_coarse_l2_error, unlimited_coarse_linf_error = analysis_callback(sol)
+
+    trixi_include(@__MODULE__, elixir,
+                  initial_refinement_level = 4, tspan = (0.0, 0.1),
+                  algorithm = algorithm, callbacks = nothing,
+                  dt = 1.0e-3, adaptive = true, step_limiter = nothing)
+    @test Trixi.SciMLBase.successful_retcode(sol.retcode)
+    unlimited_fine_l2_error, unlimited_fine_linf_error = analysis_callback(sol)
+
+    @test all(unlimited_fine_l2_error .< unlimited_coarse_l2_error / 4)
+    @test all(unlimited_fine_linf_error .< unlimited_coarse_linf_error / 4)
+
+    coarse_l2_impact = abs.(coarse_l2_error - unlimited_coarse_l2_error)
+    coarse_linf_impact = abs.(coarse_linf_error - unlimited_coarse_linf_error)
+    fine_l2_impact = abs.(fine_l2_error - unlimited_fine_l2_error)
+    fine_linf_impact = abs.(fine_linf_error - unlimited_fine_linf_error)
+
+    @test all(fine_l2_impact .< coarse_l2_impact)
+    @test all(fine_linf_impact .< coarse_linf_impact)
 end
 
 @testitem "Parabolic1D: VariableBoundsCallback" setup=[Setup, Parabolic1D] tags=[
