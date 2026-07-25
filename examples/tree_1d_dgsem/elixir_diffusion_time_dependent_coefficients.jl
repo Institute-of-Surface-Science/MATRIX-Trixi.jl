@@ -8,58 +8,25 @@ using Trixi
 #
 #   d_t u = d_x(D(t) * d_x u) - k(t) * u + f(x, t)
 #
-# on a periodic domain. The spatial argument of `diffusivity` is intentionally retained
-# to demonstrate the same API required by a coefficient D(x, t).
-@inline diffusivity(x, t) = 0.2 * (1 + 0.25 * sin(t))
+# on a periodic domain. The spatial and equation arguments are intentionally retained to
+# demonstrate the same provider API required by a coefficient D(u, x, t).
+@inline diffusivity_value(x, t, equations) = 0.2 * (1 + 0.25 * sin(t))
 @inline reaction_rate(t) = 0.3 * (1 + 0.2 * cos(t))
 
-# This example-local equation implements only the extended parabolic flux API. Existing Trixi
-# equations retain the original kernel for the shorter, time-independent flux method.
-struct TimeDependentDiffusionEquation1D{F} <: Trixi.AbstractLaplaceDiffusion{1, 1}
-    diffusivity::F
-end
-
-Trixi.varnames(::typeof(cons2cons), ::TimeDependentDiffusionEquation1D) = ("scalar",)
-Trixi.varnames(::typeof(cons2prim), ::TimeDependentDiffusionEquation1D) = ("scalar",)
-Trixi.varnames(::typeof(cons2entropy), ::TimeDependentDiffusionEquation1D) = ("scalar",)
-
-@inline Trixi.cons2prim(u, ::TimeDependentDiffusionEquation1D) = u
-@inline Trixi.cons2entropy(u, ::TimeDependentDiffusionEquation1D) = u
-
-# The coefficient changes during integration. Marking it nonconstant also prevents
-# `linear_structure` from treating the semidiscretization as a fixed autonomous operator.
-@inline function Trixi.have_constant_diffusivity(::TimeDependentDiffusionEquation1D)
-    return Trixi.False()
-end
-
-@inline function Trixi.have_space_time_dependent_flux(::TimeDependentDiffusionEquation1D)
-    return Trixi.True()
-end
-
-@inline function Trixi.max_diffusivity(u, x, t,
-                                       equations::TimeDependentDiffusionEquation1D)
-    return equations.diffusivity(x, t)
-end
-
-@inline function Trixi.flux(u, gradients, orientation::Integer, x, t,
-                            equations::TimeDependentDiffusionEquation1D)
-    dudx, = gradients
-    return equations.diffusivity(x, t) * dudx
-end
-
-equations = TimeDependentDiffusionEquation1D(diffusivity)
+diffusivity = SpatiallyVaryingDiffusivity(diffusivity_value, 0.25)
+equations = LinearDiffusionEquation1D(diffusivity)
 
 # For u_exact = exp(-t) * sin(x), both d_t u_exact and d_xx u_exact equal
 # `-u_exact`. The source below therefore manufactures this exact solution for arbitrary
 # values of D(t) and k(t).
-@inline function exact_solution(x, t, equations::TimeDependentDiffusionEquation1D)
+@inline function exact_solution(x, t, equations::LinearDiffusionEquation1D)
     return SVector(exp(-t) * sin(x[1]))
 end
 initial_condition = exact_solution
 
 @inline function source_terms(u, _gradients, x, t,
-                              equations::TimeDependentDiffusionEquation1D)
-    diffusion = equations.diffusivity(x, t)
+                              equations::LinearDiffusionEquation1D)
+    diffusion = Trixi.diffusivity_value(equations.diffusivity, x, t, equations)
     reaction = reaction_rate(t)
     u_exact = exact_solution(x, t, equations)[1]
     manufactured_forcing = (diffusion + reaction - 1) * u_exact
@@ -95,7 +62,7 @@ callbacks = CallbackSet(summary_callback, analysis_callback, alive_callback,
 ###############################################################################
 # run the simulation
 
-# The callback re-evaluates the time-dependent diffusivity when selecting every time step.
+# The callback uses the provider's declared global upper bound when selecting time steps.
 sol = solve(ode, RDPK3SpFSAL49();
             dt = stepsize_callback(ode), adaptive = false,
             ode_default_options()..., callback = callbacks)
