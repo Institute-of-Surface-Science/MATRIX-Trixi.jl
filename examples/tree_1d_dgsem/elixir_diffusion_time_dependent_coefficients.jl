@@ -62,7 +62,7 @@ callbacks = CallbackSet(summary_callback, analysis_callback, alive_callback,
 ###############################################################################
 # run the simulation
 
-# The callback re-evaluates the time-dependent diffusivity when selecting every time step.
+# The callback uses the provider's declared global upper bound when selecting time steps.
 sol = solve(ode, RDPK3SpFSAL49();
             dt = stepsize_callback(ode), adaptive = false,
             ode_default_options()..., callback = callbacks)

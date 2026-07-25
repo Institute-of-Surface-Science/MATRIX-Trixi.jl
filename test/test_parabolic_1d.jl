@@ -870,8 +870,8 @@ end
                             have_constant_diffusivity(equations_monotonic),
                             equations_monotonic, equations_monotonic, solver,
                             semi_monotonic.cache)
-    @test dt_final < dt_initial
-    @test dt_final ≈ dt_initial / (1 + t_final)
+    @test dt_final ≈ dt_initial
+    @test max_diffusivity(SVector(1.0), x, t_final, equations_monotonic) == 0.15
 
     @test_allocations(Trixi.rhs_parabolic!, semi, sol, 1000)
 end

@@ -2207,6 +2207,8 @@ end
 end
 
 @testitem "Type stability: Linear Diffusion Equation" setup=[Setup, TypeStability] tags=[:misc_part1] begin
+    using Trixi
+
     struct StateDependentDiffusivity <: AbstractDiffusivityCoefficient end
 
     Trixi.have_constant_diffusivity(::StateDependentDiffusivity) = Trixi.False()
