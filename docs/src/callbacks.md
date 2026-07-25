@@ -188,10 +188,35 @@ more callbacks, you need to turn them into a `CallbackSet` first by calling
           should therefore be called after `StepsizeCallback`
 
 
-## Stage callbacks
+## Stage and step limiters
 [`PositivityPreservingLimiterZhangShu`](@ref) is a positivity-preserving limiter, used to enforce
 physical constraints. An example elixir using this feature can be found at
 [`examples/tree_2d_dgsem/elixir_euler_positivity.jl`](https://github.com/trixi-framework/Trixi.jl/blob/main/examples/tree_2d_dgsem/elixir_euler_positivity.jl).
+
+[`BoundsPreservingLimiterZhangShu`](@ref) enforces one-sided or two-sided nodal bounds
+while preserving every element mean. For example, a scalar concentration can be limited
+to `[0, 1]` during implicit diffusion integration as follows:
+```julia
+using ADTypes: AutoFiniteDiff
+using OrdinaryDiffEqSDIRK: TRBDF2
+
+concentration(u, equations) = u[1]
+limiter! = BoundsPreservingLimiterZhangShu(lower = (0.0,),
+                                           upper = (1.0,),
+                                           variables = (concentration,))
+algorithm = TRBDF2(; autodiff = AutoFiniteDiff(), step_limiter! = limiter!)
+```
+The tuples may contain `nothing` for unused sides. The limiter scales each element's
+nodal states towards its mean, so it cannot repair a mean that is itself outside the
+configured interval without sacrificing conservation. Use [`VariableBoundsCallback`](@ref)
+independently to verify accepted states and diagnose this case. Bounds hold up to
+floating-point roundoff; configure the diagnostic tolerance accordingly.
+
+OrdinaryDiffEq dense-output values at `saveat` times between accepted steps are
+interpolants and are not passed through the limiter. If saved states must satisfy the
+bounds, include the output times in `tstops` so they become accepted step endpoints.
+A complete implicit diffusion example is available at
+`examples/tree_1d_dgsem/elixir_diffusion_perfect_sink_limiter.jl`.
 
 ## Implementing new callbacks
 Since Trixi.jl is compatible with [OrdinaryDiffEq.jl](https://github.com/SciML/OrdinaryDiffEq.jl),

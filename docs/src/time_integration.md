@@ -26,8 +26,10 @@ are the following. Further documentation can be found in the
   out of memory or start to swap).
 - You can set the maximal number of time steps via `maxiters = ...`.
 - SSP methods and many low-storage methods from OrdinaryDiffEq.jl support
-  `stage_limiter!`s and `step_limiter!`s, e.g., [`PositivityPreservingLimiterZhangShu`](@ref) and [`EntropyBoundedLimiter`](@ref)
-  from Trixi.jl.
+  `stage_limiter!`s and `step_limiter!`s, e.g.,
+  [`PositivityPreservingLimiterZhangShu`](@ref),
+  [`BoundsPreservingLimiterZhangShu`](@ref), and [`EntropyBoundedLimiter`](@ref)
+  from Trixi.jl. Implicit methods such as `TRBDF2` also support `step_limiter!`.
 - If you start Julia with multiple threads and want to use them also in the time
   integration method from OrdinaryDiffEq.jl, you need to pass the keyword argument
   `thread = Trixi.Threaded()` to the algorithm, e.g.,

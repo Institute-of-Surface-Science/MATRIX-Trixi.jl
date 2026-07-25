@@ -6,23 +6,29 @@
 #! format: noindent
 
 # `compute_u_mean` is used in:
-# (Stage-) Callbacks `EntropyBoundedLimiter`, `PositivityPreservingLimiterZhangShu`, and
-# `PositivityPreservingLimiterLiuZhang`. 
+# (Stage-) Callbacks `EntropyBoundedLimiter`, `PositivityPreservingLimiterZhangShu`,
+# `BoundsPreservingLimiterZhangShu`, and `PositivityPreservingLimiterLiuZhang`.
 # `set_u_mean!` is used in `PositivityPreservingLimiterLiuZhang`.
 
-# positional arguments `mesh` and `cache` passed in to match signature of 2D/3D functions
 @inline function compute_u_mean(u::AbstractArray{<:Any, 3}, element,
                                 mesh::AbstractMesh{1}, equations, dg::DGSEM, cache)
     @unpack weights = dg.basis
+    @unpack inverse_jacobian = cache.elements
+
+    node_volume = zero(eltype(weights)) * zero(eltype(inverse_jacobian))
+    total_volume = zero(node_volume)
 
     u_mean = zero(get_node_vars(u, equations, dg, 1, element))
     for i in eachnode(dg)
+        volume_jacobian = abs(inv(get_inverse_jacobian(inverse_jacobian, mesh,
+                                                       i, element)))
+        node_volume = weights[i] * volume_jacobian
+        total_volume += node_volume
+
         u_node = get_node_vars(u, equations, dg, i, element)
-        u_mean += u_node * weights[i]
+        u_mean += u_node * node_volume
     end
-    # normalize with the total volume
-    # note that the reference element is [-1,1], thus the weights sum to 2
-    return 0.5f0 * u_mean
+    return u_mean / total_volume # normalize with the total volume
 end
 
 @inline function compute_u_mean(u::AbstractArray{<:Any, 4}, element,
