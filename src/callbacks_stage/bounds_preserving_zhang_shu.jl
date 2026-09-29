@@ -27,8 +27,9 @@ is outside its bounds, the element is collapsed to that mean to preserve conserv
 
 Pass this limiter as the solve-level `step_limiter` with implicit OrdinaryDiffEq
 algorithms such as `TRBDF2`, or as `stage_limiter` with compatible explicit Runge-Kutta
-algorithms. The per-algorithm `step_limiter!` and `stage_limiter!` fields are deprecated
-compatibility syntax.
+algorithms. Solve-level step limiting requires OrdinaryDiffEqCore v4.15.3 or newer
+to refresh FSAL derivatives after modifying an accepted endpoint. The per-algorithm
+`step_limiter!` and `stage_limiter!` fields are deprecated compatibility syntax.
 """
 struct BoundsPreservingLimiterZhangShu{N, Lower, Upper, Variables}
     lower::Lower

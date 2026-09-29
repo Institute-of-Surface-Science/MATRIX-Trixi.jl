@@ -14,6 +14,8 @@ for human readability.
   adaptive implicit `TRBDF2` integration of local-DG parabolic diffusion
   ([Institute-of-Surface-Science/MATRIX-Trixi.jl#14](https://github.com/Institute-of-Surface-Science/MATRIX-Trixi.jl/pull/14),
   [Institute-of-Surface-Science/MATRIX-Trixi.jl#16](https://github.com/Institute-of-Surface-Science/MATRIX-Trixi.jl/pull/16)).
+  OrdinaryDiffEqCore v4.15.3 or newer is required for the released FSAL derivative
+  refresh fix ([SciML/OrdinaryDiffEq.jl#4035](https://github.com/SciML/OrdinaryDiffEq.jl/pull/4035)).
 - Added `VariableBoundsCallback` for diagnostic monitoring of one-sided or two-sided
   bounds on state components and derived scalar quantities, including tolerance-aware
   violations, nonfinite detection, optional file output, MPI reductions, and termination

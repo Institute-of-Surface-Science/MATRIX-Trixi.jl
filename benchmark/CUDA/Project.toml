@@ -11,6 +11,6 @@ Trixi = {path = "../.."}
 [compat]
 CUDA = "6"
 JSON = "1.4.0"
-OrdinaryDiffEqLowStorageRK = "1.12.0"
+OrdinaryDiffEqLowStorageRK = "2, 3"
 TimerOutputs = "0.5.25"
 Trixi = "0.16"

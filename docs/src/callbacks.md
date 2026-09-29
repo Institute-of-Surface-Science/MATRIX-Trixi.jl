@@ -216,9 +216,10 @@ configured interval without sacrificing conservation. Use [`VariableBoundsCallba
 independently to verify accepted states and diagnose this case. Bounds hold up to
 floating-point roundoff; configure the diagnostic tolerance accordingly.
 
-OrdinaryDiffEq forms an adaptive method's embedded error estimate before applying the
-solve-level `step_limiter`. For each element, this limiter subsequently replaces every
-nodal state ``u_i`` by ``\bar{u} + \theta (u_i - \bar{u})`` with
+Solve-level bounds limiting requires OrdinaryDiffEqCore v4.15.3 or newer.
+OrdinaryDiffEq forms an adaptive method's embedded error estimate and accepts the
+step before applying the solve-level `step_limiter`. For each element, this limiter
+replaces every nodal state ``u_i`` by ``\bar{u} + \theta (u_i - \bar{u})`` with
 ``0 \leq \theta \leq 1``. It therefore preserves the element mean and cannot increase
 nodal deviations from that mean. The adaptive tolerances control the underlying
 unprojected time-integration step, while [`VariableBoundsCallback`](@ref) independently

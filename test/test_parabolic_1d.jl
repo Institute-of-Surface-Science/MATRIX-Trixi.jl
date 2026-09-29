@@ -966,10 +966,11 @@ end
     @test variable_bounds_callback.affect!.violations_detected == 0
     @test variable_bounds_callback.affect!.checks_performed == sol.stats.naccept + 1
 
+    # The diagnostic callback must not clear the limiter's FSAL refresh request.
     integrator = Trixi.init(ode, algorithm;
                             abstol = time_int_tol, reltol = time_int_tol,
                             dt = 1.0e-3, adaptive = true,
-                            step_limiter = limiter!,
+                            step_limiter = limiter!, callback = variable_bounds_callback,
                             Trixi.ode_default_options()...)
     Trixi.step!(integrator)
     Trixi.step!(integrator)
@@ -977,6 +978,22 @@ end
     integrator.f(expected_fsalfirst, integrator.uprev, integrator.p,
                  integrator.tprev)
     @test integrator.fsalfirst ≈ expected_fsalfirst
+
+    # Make output times accepted endpoints so saved profiles are limited, too.
+    observation_times = [0.0, 2.0e-5, 1.0e-4, 5.0e-4, 2.0e-3]
+    saved_solution = solve(ode, algorithm;
+                           abstol = time_int_tol, reltol = time_int_tol,
+                           dt = 1.0e-3, adaptive = true,
+                           step_limiter = limiter!, callback = variable_bounds_callback,
+                           saveat = observation_times, tstops = observation_times,
+                           save_everystep = false, save_start = true, save_end = true)
+    @test Trixi.SciMLBase.successful_retcode(saved_solution.retcode)
+    @test saved_solution.t == observation_times
+    @test all(u -> minimum(u) >= -1.0e-12, saved_solution.u)
+    @test all(u -> maximum(u) <= 1.0 + 1.0e-12, saved_solution.u)
+    @test variable_bounds_callback.affect!.violations_detected == 0
+    @test variable_bounds_callback.affect!.checks_performed ==
+          saved_solution.stats.naccept + 1
 
     no_limiter! = (u, integrator, semi, t) -> nothing
     trixi_include(@__MODULE__, elixir, tspan = (0.0, 0.001), limiter! = no_limiter!)
