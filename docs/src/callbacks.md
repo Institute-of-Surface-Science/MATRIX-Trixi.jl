@@ -203,7 +203,8 @@ using OrdinaryDiffEqSDIRK: TRBDF2
 concentration(u, equations) = u[1]
 limiter! = BoundsPreservingLimiterZhangShu(lower = (0.0,),
                                            upper = (1.0,),
-                                           variables = (concentration,))
+                                           variables = (concentration,),
+                                           polynomial_bounds = true)
 algorithm = TRBDF2(; autodiff = AutoFiniteDiff())
 
 sol = solve(ode, algorithm;
@@ -215,6 +216,16 @@ nodal states towards its mean, so it cannot repair a mean that is itself outside
 configured interval without sacrificing conservation. Use [`VariableBoundsCallback`](@ref)
 independently to verify accepted states and diagnose this case. Bounds hold up to
 floating-point roundoff; configure the diagnostic tolerance accordingly.
+
+For affine variables such as concentration in one-dimensional DGSEM solutions,
+`polynomial_bounds=true` also bounds the polynomial between nodes. It evaluates
+the polynomial at the element endpoints and all sign-changing stationary points,
+then uses the same conservative scaling about the physical element mean. Spatial
+resampling of this limited polynomial therefore remains bounded up to roundoff.
+The default `polynomial_bounds=false` only bounds nodal values and supports one,
+two, and three dimensions. Polynomial bounds do not apply to nonlinear functions
+of the interpolated state. An inadmissible element mean remains a violation in
+either mode; it is not clipped.
 
 Solve-level bounds limiting requires OrdinaryDiffEqCore v4.15.3 or newer.
 OrdinaryDiffEq forms an adaptive method's embedded error estimate and accepts the

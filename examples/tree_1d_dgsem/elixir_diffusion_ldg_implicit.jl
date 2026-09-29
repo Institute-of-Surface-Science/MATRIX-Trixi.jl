@@ -19,7 +19,8 @@ mesh = TreeMesh(0.0, 1.0,
                 periodicity = false)
 
 function analytical_solution(x, t, equations)
-    scalar = sinpi(x[1]) * exp(-equations.diffusivity * pi^2 * t)
+    diffusivity = Trixi.diffusivity_value(equations.diffusivity, equations)
+    scalar = sinpi(x[1]) * exp(-diffusivity * pi^2 * t)
     return SVector(scalar)
 end
 initial_condition = analytical_solution

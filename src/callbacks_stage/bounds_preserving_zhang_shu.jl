@@ -6,7 +6,7 @@
 #! format: noindent
 
 """
-    BoundsPreservingLimiterZhangShu(; lower, upper, variables)
+    BoundsPreservingLimiterZhangShu(; lower, upper, variables, polynomial_bounds=false)
 
 The fully-discrete bounds-preserving limiter of
 - Zhang, Shu (2010)
@@ -25,6 +25,15 @@ or when suitable convexity or concavity assumptions hold. If the value at an ele
 is outside its bounds, the element is collapsed to that mean to preserve conservation; a
 [`VariableBoundsCallback`](@ref) can be used to diagnose the remaining violation.
 
+Set `polynomial_bounds=true` for affine scalar variables in one-dimensional DGSEM
+solutions to also enforce the bounds between nodes. This mode evaluates the extrema
+of each variable's element polynomial, including its stationary points, before scaling
+the conservative state about its physical element mean. Thus spatial interpolation of
+the limited polynomial remains bounded up to roundoff when the mean is admissible.
+It does not bound nonlinear functions of the interpolated state or dense time
+interpolation. The default mode only checks DG nodes and also supports two and three
+dimensions.
+
 Pass this limiter as the solve-level `step_limiter` with implicit OrdinaryDiffEq
 algorithms such as `TRBDF2`, or as `stage_limiter` with compatible explicit Runge-Kutta
 algorithms. Solve-level step limiting requires OrdinaryDiffEqCore v4.15.3 or newer
@@ -35,9 +44,11 @@ struct BoundsPreservingLimiterZhangShu{N, Lower, Upper, Variables}
     lower::Lower
     upper::Upper
     variables::Variables
+    polynomial_bounds::Bool
 end
 
-function BoundsPreservingLimiterZhangShu(lower::Tuple, upper::Tuple, variables::Tuple)
+function BoundsPreservingLimiterZhangShu(lower::Tuple, upper::Tuple, variables::Tuple;
+                                         polynomial_bounds::Bool = false)
     n_variables = length(variables)
     n_variables > 0 || throw(ArgumentError("at least one variable must be specified"))
     length(lower) == n_variables ||
@@ -66,11 +77,14 @@ function BoundsPreservingLimiterZhangShu(lower::Tuple, upper::Tuple, variables::
     end
 
     return BoundsPreservingLimiterZhangShu{n_variables, typeof(lower), typeof(upper),
-                                           typeof(variables)}(lower, upper, variables)
+                                           typeof(variables)}(lower, upper, variables,
+                                                              polynomial_bounds)
 end
 
-function BoundsPreservingLimiterZhangShu(; lower, upper, variables)
-    return BoundsPreservingLimiterZhangShu(Tuple(lower), Tuple(upper), Tuple(variables))
+function BoundsPreservingLimiterZhangShu(; lower, upper, variables,
+                                         polynomial_bounds::Bool = false)
+    return BoundsPreservingLimiterZhangShu(Tuple(lower), Tuple(upper), Tuple(variables);
+                                           polynomial_bounds)
 end
 
 function (limiter!::BoundsPreservingLimiterZhangShu)(u_ode, integrator,
@@ -80,7 +94,8 @@ function (limiter!::BoundsPreservingLimiterZhangShu)(u_ode, integrator,
     @trixi_timeit timer() "Zhang-Shu bounds-preserving limiter" begin
         limiter_bounds_preserving_zhang_shu!(u, limiter!.lower, limiter!.upper,
                                              limiter!.variables,
-                                             mesh_equations_solver_cache(semi)...)
+                                             mesh_equations_solver_cache(semi)...;
+                                             polynomial_bounds = limiter!.polynomial_bounds)
     end
 
     return nothing
@@ -92,19 +107,32 @@ function limiter_bounds_preserving_zhang_shu!(u, lower::NTuple{N, Any},
                                               upper::NTuple{N, Any},
                                               variables::NTuple{N, Any}, mesh,
                                               equations,
-                                              solver, cache) where {N}
-    limiter_bounds_preserving_zhang_shu!(u, first(lower), first(upper),
-                                         first(variables), mesh, equations, solver,
-                                         cache)
+                                              solver, cache;
+                                              polynomial_bounds = false) where {N}
+    if polynomial_bounds
+        limiter_bounds_preserving_polynomial!(u, first(lower), first(upper),
+                                              first(variables), mesh, equations,
+                                              solver, cache)
+    else
+        limiter_bounds_preserving_zhang_shu!(u, first(lower), first(upper),
+                                             first(variables), mesh, equations, solver,
+                                             cache)
+    end
     limiter_bounds_preserving_zhang_shu!(u, Base.tail(lower), Base.tail(upper),
                                          Base.tail(variables), mesh, equations, solver,
-                                         cache)
+                                         cache; polynomial_bounds)
     return nothing
 end
 
 function limiter_bounds_preserving_zhang_shu!(u, ::Tuple{}, ::Tuple{}, ::Tuple{}, mesh,
-                                              equations, solver, cache)
+                                              equations, solver, cache;
+                                              polynomial_bounds = false)
     return nothing
+end
+
+function limiter_bounds_preserving_polynomial!(u, lower, upper, variable, mesh,
+                                               equations, solver, cache)
+    throw(ArgumentError("polynomial bounds require a one-dimensional DGSEM solution"))
 end
 
 @inline function bounds_preserving_theta(value_min, value_max, value_mean, lower, upper)

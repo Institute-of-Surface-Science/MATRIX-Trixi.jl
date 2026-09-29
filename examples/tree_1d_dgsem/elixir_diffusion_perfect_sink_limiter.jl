@@ -39,7 +39,9 @@ concentration(u, equations) = u[1]
 lower = (0.0,)
 upper = (1.0,)
 variables = (concentration,)
-limiter! = BoundsPreservingLimiterZhangShu(; lower, upper, variables)
+# Bound the entire element polynomial so spatially interpolated profiles remain bounded.
+limiter! = BoundsPreservingLimiterZhangShu(; lower, upper, variables,
+                                           polynomial_bounds = true)
 
 concentration_bound = VariableBound(:concentration, concentration;
                                     lower = first(lower), upper = first(upper),
