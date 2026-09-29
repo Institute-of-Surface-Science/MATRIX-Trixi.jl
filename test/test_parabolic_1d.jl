@@ -855,8 +855,9 @@ end
     @test Trixi.flux(SVector(1.0), gradients, 1, x, 0.0, equations) !=
           Trixi.flux(SVector(1.0), gradients, 1, x, 0.5, equations)
 
-    monotonic_diffusivity = (x, t) -> 0.1 * (1 + t)
-    equations_monotonic = TimeDependentDiffusionEquation1D(monotonic_diffusivity)
+    monotonic_diffusivity_value = (x, t, equations) -> 0.1 * (1 + t)
+    monotonic_diffusivity = SpatiallyVaryingDiffusivity(monotonic_diffusivity_value, 0.15)
+    equations_monotonic = LinearDiffusionEquation1D(monotonic_diffusivity)
     semi_monotonic = remake(semi; equations = equations_monotonic)
     ode_monotonic = semidiscretize(semi_monotonic, tspan)
     u_monotonic = Trixi.wrap_array(ode_monotonic.u0, semi_monotonic)
@@ -869,8 +870,8 @@ end
                             have_constant_diffusivity(equations_monotonic),
                             equations_monotonic, equations_monotonic, solver,
                             semi_monotonic.cache)
-    @test dt_final < dt_initial
-    @test dt_final ≈ dt_initial / (1 + t_final)
+    @test dt_final ≈ dt_initial
+    @test max_diffusivity(SVector(1.0), x, t_final, equations_monotonic) == 0.15
 
     @test_allocations(Trixi.rhs_parabolic!, semi, sol, 1000)
 end

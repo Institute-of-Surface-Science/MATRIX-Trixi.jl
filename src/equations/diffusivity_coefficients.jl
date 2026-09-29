@@ -14,6 +14,11 @@ Constant providers, for which `have_space_time_dependent_flux` returns `False()`
 implement `diffusivity_value(coefficient, equations)`. Space- or time-dependent providers,
 for which it returns `True()`, must instead implement
 `diffusivity_value(coefficient, x, t, equations)`.
+
+Equation types that can supply the local solution state call
+`diffusivity_value(coefficient, u, x, t, equations)`. The default implementation forwards
+to the four-argument method for backward compatibility. A provider may specialize the
+five-argument method when its coefficient depends on `u`.
 """
 abstract type AbstractDiffusivityCoefficient end
 
@@ -77,6 +82,11 @@ end
     return coefficient.value_function(x, t, equations)
 end
 
+@inline function diffusivity_value(coefficient::AbstractDiffusivityCoefficient, u, x, t,
+                                   equations)
+    return diffusivity_value(coefficient, x, t, equations)
+end
+
 @inline function diffusivity_value(coefficient::AbstractDiffusivityCoefficient, args...)
     error("Interface: Must implement diffusivity_value(::$(typeof(coefficient)), ...)")
 end
@@ -93,6 +103,7 @@ end
 # Fallbacks for existing equation types that still store diffusivity values directly.
 @inline diffusivity_value(diffusivity, equations) = diffusivity
 @inline diffusivity_value(diffusivity, x, t, equations) = diffusivity
+@inline diffusivity_value(diffusivity, u, x, t, equations) = diffusivity
 @inline diffusivity_upper_bound(diffusivity) = diffusivity
 
 function Base.similar(coefficient::ConstantDiffusivity,

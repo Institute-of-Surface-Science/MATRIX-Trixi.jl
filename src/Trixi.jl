@@ -20,7 +20,7 @@ module Trixi
 
 Version of the public API added by the MATRIX-Trixi fork.
 """
-const MATRIX_TRIXI_API_VERSION = v"1.0.0"
+const MATRIX_TRIXI_API_VERSION = v"1.2.0"
 
 using Preferences: @load_preference, set_preferences!
 const _PREFERENCE_SQRT = @load_preference("sqrt", "sqrt_Trixi_NaN")
