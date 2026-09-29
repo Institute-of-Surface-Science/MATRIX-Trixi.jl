@@ -1754,8 +1754,8 @@ end
         interpolation = Trixi.polynomial_interpolation_matrix(solver.basis.nodes,
                                                               range(-one(RealT), one(RealT);
                                                                     length = 21))
-        interpolation_nd = reduce(kron, ntuple(_ -> interpolation, dimension))
-        sample = state -> interpolation_nd * reshape(state, length(nodes), :)
+        tensor_interpolation = reduce(kron, ntuple(_ -> interpolation, dimension))
+        sample = state -> tensor_interpolation * reshape(state, length(nodes), :)
         means = () -> [Trixi.compute_u_mean(u, element,
                                             Trixi.mesh_equations_solver_cache(semi)...)
                        for element in axes(u, dimension + 2)]

@@ -34,8 +34,8 @@
                                 rtol = 1.0e-12, atol = 1.0e-12), sol.u)
         interpolation = Trixi.polynomial_interpolation_matrix(solver.basis.nodes,
                                                               range(-1.0, 1.0; length = 11))
-        interpolation_nd = reduce(kron, ntuple(_ -> interpolation, dimension))
-        profiles = [interpolation_nd * reshape(u, Trixi.nnodes(solver)^dimension, :)
+        tensor_interpolation = reduce(kron, ntuple(_ -> interpolation, dimension))
+        profiles = [tensor_interpolation * reshape(u, Trixi.nnodes(solver)^dimension, :)
                     for u in sol.u]
         @test all(u -> minimum(u) >= -1.0e-12, profiles)
         @test all(u -> maximum(u) <= 1.0 + 1.0e-12, profiles)
