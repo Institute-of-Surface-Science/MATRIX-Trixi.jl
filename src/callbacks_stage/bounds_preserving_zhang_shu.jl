@@ -25,14 +25,15 @@ or when suitable convexity or concavity assumptions hold. If the value at an ele
 is outside its bounds, the element is collapsed to that mean to preserve conservation; a
 [`VariableBoundsCallback`](@ref) can be used to diagnose the remaining violation.
 
-Set `polynomial_bounds=true` for affine scalar variables in one-dimensional DGSEM
-solutions to also enforce the bounds between nodes. This mode evaluates the extrema
-of each variable's element polynomial, including its stationary points, before scaling
-the conservative state about its physical element mean. Thus spatial interpolation of
-the limited polynomial remains bounded up to roundoff when the mean is admissible.
-It does not bound nonlinear functions of the interpolated state or dense time
-interpolation. The default mode only checks DG nodes and also supports two and three
-dimensions.
+Set `polynomial_bounds=true` for affine scalar variables in one-, two-, or
+three-dimensional DGSEM solutions to also enforce the bounds between nodes. In 1D,
+this mode evaluates polynomial extrema, including stationary points. In 2D and 3D,
+it encloses the tensor-product polynomial using Bernstein coefficients and midpoint
+subdivision. These conservative enclosures can cause additional limiting compared
+with exact extrema. Both approaches scale the conservative state about its physical
+element mean, so spatial interpolation remains bounded up to roundoff when the mean
+is admissible. They do not bound nonlinear functions of the interpolated state or
+dense time interpolation. The default mode only checks DG nodes.
 
 Pass this limiter as the solve-level `step_limiter` with implicit OrdinaryDiffEq
 algorithms such as `TRBDF2`, or as `stage_limiter` with compatible explicit Runge-Kutta
@@ -132,7 +133,7 @@ end
 
 function limiter_bounds_preserving_polynomial!(u, lower, upper, variable, mesh,
                                                equations, solver, cache)
-    throw(ArgumentError("polynomial bounds require a one-dimensional DGSEM solution"))
+    throw(ArgumentError("polynomial bounds require a one-, two-, or three-dimensional DGSEM solution"))
 end
 
 @inline function bounds_preserving_theta(value_min, value_max, value_mean, lower, upper)
@@ -170,4 +171,5 @@ end
 include("bounds_preserving_zhang_shu_dg1d.jl")
 include("bounds_preserving_zhang_shu_dg2d.jl")
 include("bounds_preserving_zhang_shu_dg3d.jl")
+include("bounds_preserving_zhang_shu_bernstein.jl")
 end # @muladd

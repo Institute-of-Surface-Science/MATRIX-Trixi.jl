@@ -2235,7 +2235,7 @@ end
               @inferred(flux(u, gradients_1d, 1, equations_1d))
 
         coefficient_1d = SpatiallyVaryingDiffusivity((x, t, equations) -> one(eltype(x)) +
-                                                                             t,
+                                                                          t,
                                                      RealT(2))
         equations_variable_1d = LinearDiffusionEquation1D(coefficient_1d)
         @test @inferred(flux(u, gradients_1d, 1, x, t,

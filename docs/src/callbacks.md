@@ -217,13 +217,20 @@ configured interval without sacrificing conservation. Use [`VariableBoundsCallba
 independently to verify accepted states and diagnose this case. Bounds hold up to
 floating-point roundoff; configure the diagnostic tolerance accordingly.
 
-For affine variables such as concentration in one-dimensional DGSEM solutions,
-`polynomial_bounds=true` also bounds the polynomial between nodes. It evaluates
-the polynomial at the element endpoints and all sign-changing stationary points,
-then uses the same conservative scaling about the physical element mean. Spatial
-resampling of this limited polynomial therefore remains bounded up to roundoff.
-The default `polynomial_bounds=false` only bounds nodal values and supports one,
-two, and three dimensions. Polynomial bounds do not apply to nonlinear functions
+For affine variables such as concentration in one-, two-, and three-dimensional
+DGSEM solutions, `polynomial_bounds=true` also bounds the polynomial between nodes.
+In 1D, it evaluates the element endpoints and all sign-changing stationary points.
+In 2D and 3D, it converts the tensor-product polynomial to Bernstein coefficients,
+whose range encloses the values throughout the element, including faces and interior.
+Midpoint subdivision tightens this enclosure, with at most two bisections per
+coordinate (16 subboxes in 2D and 64 in 3D). This work limit retains a conservative
+enclosure, which can cause more limiting than exact extrema. The method follows the
+[Bernstein range-enclosure property](https://interval.louisiana.edu/reliable-computing-journal/volume-14/reliable-computing-14-pp-117-137.pdf).
+
+Both approaches scale about the physical element mean, preserving conservation on
+mapped elements. Spatial resampling of the limited polynomial remains bounded up
+to roundoff when that mean is admissible. The default `polynomial_bounds=false`
+only bounds nodal values. Polynomial bounds do not apply to nonlinear functions
 of the interpolated state. An inadmissible element mean remains a violation in
 either mode; it is not clipped.
 

@@ -9,8 +9,9 @@ for human readability.
 
 #### Added
 - Added the optional `polynomial_bounds=true` mode to
-  `BoundsPreservingLimiterZhangShu` for affine variables in one-dimensional DGSEM
-  solutions. It includes extrema between nodes in the conservative correction,
+  `BoundsPreservingLimiterZhangShu` for affine variables in one-, two-, and
+  three-dimensional DGSEM solutions. It uses extrema in 1D and conservative
+  Bernstein enclosures in 2D/3D to include values between nodes in the correction,
   keeping spatially interpolated concentration profiles bounded up to roundoff
   when element means are admissible. The combined MATRIX API version is `1.3.0`.
 - `LinearDiffusionEquation1D` now supports diffusivity coefficient providers,
