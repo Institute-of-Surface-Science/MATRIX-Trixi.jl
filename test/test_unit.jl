@@ -1432,6 +1432,406 @@ end
     end
 end
 
+@testitem "Unit: BoundsPreservingLimiterZhangShu DGSEM kernels" setup=[
+    Setup,
+    UnitTests
+] tags=[:misc_part1] begin
+    import Trixi
+    using Trixi: BoundsPreservingLimiterZhangShu, DGSEM,
+                 LinearScalarAdvectionEquation1D, LinearScalarAdvectionEquation2D,
+                 LinearScalarAdvectionEquation3D, SemidiscretizationHyperbolic, SVector,
+                 StructuredMesh, TreeMesh, boundary_condition_periodic
+
+    scalar(u, equations) = u[1]
+
+    @test_throws ArgumentError BoundsPreservingLimiterZhangShu(lower = (), upper = (),
+                                                               variables = ())
+    @test_throws ArgumentError BoundsPreservingLimiterZhangShu(lower = (0.0,),
+                                                               upper = (),
+                                                               variables = (scalar,))
+    @test_throws ArgumentError BoundsPreservingLimiterZhangShu(lower = (nothing,),
+                                                               upper = (nothing,),
+                                                               variables = (scalar,))
+    @test_throws ArgumentError BoundsPreservingLimiterZhangShu(lower = ("zero",),
+                                                               upper = (1.0,),
+                                                               variables = (scalar,))
+    @test_throws ArgumentError BoundsPreservingLimiterZhangShu(lower = (0.0,),
+                                                               upper = (Inf,),
+                                                               variables = (scalar,))
+    @test_throws ArgumentError BoundsPreservingLimiterZhangShu(lower = (1.0,),
+                                                               upper = (0.0,),
+                                                               variables = (scalar,))
+
+    limiter! = BoundsPreservingLimiterZhangShu(lower = (0.0,), upper = (1.0,),
+                                               variables = (scalar,))
+    @test limiter!.lower == (0.0,)
+    @test limiter!.upper == (1.0,)
+
+    dimension_cases = ((LinearScalarAdvectionEquation1D(1.0), -1.0, 1.0),
+                       (LinearScalarAdvectionEquation2D(1.0, 1.0), (-1.0, -1.0),
+                        (1.0, 1.0)),
+                       (LinearScalarAdvectionEquation3D(1.0, 1.0, 1.0),
+                        (-1.0, -1.0, -1.0), (1.0, 1.0, 1.0)))
+
+    for (equations, coordinates_min, coordinates_max) in dimension_cases
+        mesh = TreeMesh(coordinates_min, coordinates_max;
+                        initial_refinement_level = 1,
+                        periodicity = true)
+        solver = DGSEM(polydeg = 2)
+        initial_condition = (x, t, equations) -> SVector(0.5)
+        semi = SemidiscretizationHyperbolic(mesh, equations, initial_condition, solver;
+                                            boundary_conditions = boundary_condition_periodic)
+        u_ode = Trixi.compute_coefficients(0.0, semi)
+        u = Trixi.wrap_array(u_ode, semi)
+        mesh_, equations_, solver_, cache = Trixi.mesh_equations_solver_cache(semi)
+
+        node_axes = ntuple(dimension -> axes(u, dimension + 1), Trixi.ndims(mesh))
+        pattern = (-0.25, 0.5, 1.25)
+        for element in Trixi.eachelement(solver, cache),
+            node in CartesianIndices(node_axes)
+
+            u[(1, Tuple(node)..., element)...] = pattern[node[1]]
+        end
+
+        means_before = [Trixi.compute_u_mean(u, element, mesh_, equations_, solver_, cache)
+                        for element in Trixi.eachelement(solver, cache)]
+        Trixi.limiter_bounds_preserving_zhang_shu!(u, (0.0,), (1.0,), (scalar,),
+                                                   mesh_, equations_, solver_, cache)
+        means_after = [Trixi.compute_u_mean(u, element, mesh_, equations_, solver_, cache)
+                       for element in Trixi.eachelement(solver, cache)]
+
+        @test minimum(u) >= -100 * eps()
+        @test maximum(u) <= 1.0 + 100 * eps()
+        @test isapprox(means_after, means_before;
+                       rtol = 100 * eps(), atol = 100 * eps())
+
+        limited_state = copy(u)
+        Trixi.limiter_bounds_preserving_zhang_shu!(u, (0.0,), (1.0,), (scalar,),
+                                                   mesh_, equations_, solver_, cache)
+        @test u == limited_state
+
+        Trixi.ndims(mesh) == 1 || continue
+
+        pattern_one_sided = (-0.25, 0.5, 2.0)
+        for element in Trixi.eachelement(solver, cache),
+            node in CartesianIndices(node_axes)
+
+            u[(1, Tuple(node)..., element)...] = pattern_one_sided[node[1]]
+        end
+        means_before = [Trixi.compute_u_mean(u, element, mesh_, equations_, solver_, cache)
+                        for element in Trixi.eachelement(solver, cache)]
+        Trixi.limiter_bounds_preserving_zhang_shu!(u, (0.0,), (nothing,), (scalar,),
+                                                   mesh_, equations_, solver_, cache)
+        means_after = [Trixi.compute_u_mean(u, element, mesh_, equations_, solver_, cache)
+                       for element in Trixi.eachelement(solver, cache)]
+        @test minimum(u) >= -100 * eps()
+        @test maximum(u) > 1.0
+        @test isapprox(means_after, means_before;
+                       rtol = 100 * eps(), atol = 100 * eps())
+
+        pattern_invalid_mean = (-2.0, 0.5, -2.0)
+        for element in Trixi.eachelement(solver, cache),
+            node in CartesianIndices(node_axes)
+
+            u[(1, Tuple(node)..., element)...] = pattern_invalid_mean[node[1]]
+        end
+        means_before = [Trixi.compute_u_mean(u, element, mesh_, equations_, solver_, cache)
+                        for element in Trixi.eachelement(solver, cache)]
+        Trixi.limiter_bounds_preserving_zhang_shu!(u, (0.0,), (nothing,), (scalar,),
+                                                   mesh_, equations_, solver_, cache)
+        means_after = [Trixi.compute_u_mean(u, element, mesh_, equations_, solver_, cache)
+                       for element in Trixi.eachelement(solver, cache)]
+        @test isapprox(means_after, means_before;
+                       rtol = 100 * eps(), atol = 100 * eps())
+        for (element, mean) in zip(Trixi.eachelement(solver, cache), means_before)
+            @test all(isapprox(u[1, i, element], mean[1]) for i in axes(u, 2))
+        end
+    end
+
+    curved_mapping(xi) = (xi + 2)^2
+    equations = LinearScalarAdvectionEquation1D(1.0)
+    mesh = StructuredMesh((1,), curved_mapping; periodicity = true)
+    solver = DGSEM(polydeg = 2)
+    initial_condition = (x, t, equations) -> SVector(0.5)
+    semi = SemidiscretizationHyperbolic(mesh, equations, initial_condition, solver;
+                                        boundary_conditions = boundary_condition_periodic)
+    u_ode = Trixi.compute_coefficients(0.0, semi)
+    u = Trixi.wrap_array(u_ode, semi)
+    curved_pattern = (-0.25, 0.5, 1.25)
+    for i in axes(u, 2)
+        u[1, i, 1] = curved_pattern[i]
+    end
+
+    curved_mean = Trixi.compute_u_mean(u, 1,
+                                       Trixi.mesh_equations_solver_cache(semi)...)
+    @test only(curved_mean) ≈ 0.625
+    physical_mass_before = Trixi.integrate(u_ode, semi; normalize = false)
+    Trixi.limiter_bounds_preserving_zhang_shu!(u, (0.0,), (1.0,), (scalar,),
+                                               Trixi.mesh_equations_solver_cache(semi)...)
+    physical_mass_after = Trixi.integrate(u_ode, semi; normalize = false)
+
+    @test minimum(u) >= -100 * eps()
+    @test maximum(u) <= 1.0 + 100 * eps()
+    @test physical_mass_after ≈ physical_mass_before
+end
+
+@testitem "Unit: BoundsPreservingLimiterZhangShu polynomial bounds" setup=[
+    Setup,
+    UnitTests
+] tags=[:misc_part1] begin
+    import Trixi
+    using Trixi: BoundsPreservingLimiterZhangShu, DGSEM, SVector,
+                 LinearScalarAdvectionEquation1D,
+                 SemidiscretizationHyperbolic, StructuredMesh, TreeMesh,
+                 boundary_condition_periodic
+
+    scalar(u, equations) = u[1]
+    # All these profiles are bounded at their LGL nodes but violate a bound
+    # between nodes. Their exact extrema provide an independent reference.
+    cases = ((3, x -> 0.5 + 1.35 * (x - x^3),
+              0.5 - 2 * 1.35 / (3 * sqrt(3)), 0.5 + 2 * 1.35 / (3 * sqrt(3))),
+             (4, x -> 1.03 - (x^2 - 0.2)^2, 0.39, 1.03),
+             (5, x -> 0.5 + 1.9 * x * (1 - x^2)^2,
+              0.5 - 16 * 1.9 / (25 * sqrt(5)), 0.5 + 16 * 1.9 / (25 * sqrt(5))),
+             # A stationary point whose derivative has a repeated root.
+             (4, x -> ((x - 0.2) / 1.2)^4 - 1.0e-5, -1.0e-5, 1.0 - 1.0e-5))
+
+    for RealT in (Float32, Float64), (degree, profile, exact_min, exact_max) in cases
+        equations = LinearScalarAdvectionEquation1D(one(RealT))
+        mesh = TreeMesh(-one(RealT), one(RealT); initial_refinement_level = 1,
+                        periodicity = true, RealT = RealT)
+        solver = DGSEM(polydeg = degree, RealT = RealT)
+        initial_condition = (x, t, equations) -> SVector(RealT(0.5))
+        semi = SemidiscretizationHyperbolic(mesh, equations, initial_condition, solver;
+                                            boundary_conditions = boundary_condition_periodic)
+        state = Trixi.compute_coefficients(zero(RealT), semi)
+        u = Trixi.wrap_array(state, semi)
+        values = RealT.(profile.(solver.basis.nodes))
+        @test minimum(values) >= 0
+        @test maximum(values) <= 1
+        extrema = @inferred Trixi.bounds_preserving_polynomial_extrema(values,
+                                                                       solver.basis)
+        @test first(extrema)≈exact_min atol=100 * eps(RealT)
+        @test last(extrema)≈exact_max atol=100 * eps(RealT)
+        for element in axes(u, 3), i in axes(u, 2)
+            u[1, i, element] = values[i]
+        end
+        original = copy(state)
+        nodal_limiter! = BoundsPreservingLimiterZhangShu(lower = (zero(RealT),),
+                                                         upper = (one(RealT),),
+                                                         variables = (scalar,))
+        nodal_limiter!(state, nothing, semi, zero(RealT))
+        @test state == original
+
+        limiter! = BoundsPreservingLimiterZhangShu(lower = (zero(RealT),),
+                                                   upper = (one(RealT),),
+                                                   variables = (scalar,),
+                                                   polynomial_bounds = true)
+        means_before = [Trixi.compute_u_mean(u, element,
+                                             Trixi.mesh_equations_solver_cache(semi)...)
+                        for element in axes(u, 3)]
+        limiter!(state, nothing, semi, zero(RealT))
+        means_after = [Trixi.compute_u_mean(u, element,
+                                            Trixi.mesh_equations_solver_cache(semi)...)
+                       for element in axes(u, 3)]
+        @test means_after≈means_before rtol=100 * eps(RealT)
+        sample_points = range(-one(RealT), one(RealT); length = 1001)
+        interpolation = Trixi.polynomial_interpolation_matrix(solver.basis.nodes,
+                                                              sample_points)
+        sampled = interpolation * reshape(state, degree + 1, :)
+        @test minimum(sampled) >= -100 * eps(RealT)
+        @test maximum(sampled) <= 1 + 100 * eps(RealT)
+    end
+
+    # Mapped elements must conserve their physical, Jacobian-weighted mean.
+    equations = LinearScalarAdvectionEquation1D(1.0)
+    mesh = StructuredMesh((1,), xi -> (xi + 2)^2; periodicity = true)
+    solver = DGSEM(polydeg = 3)
+    initial_condition = (x, t, equations) -> SVector(0.5)
+    semi = SemidiscretizationHyperbolic(mesh, equations, initial_condition, solver;
+                                        boundary_conditions = boundary_condition_periodic)
+    state = Trixi.compute_coefficients(0.0, semi)
+    state .= cases[1][2].(solver.basis.nodes)
+    mass_before = Trixi.integrate(state, semi; normalize = false)
+    limiter! = BoundsPreservingLimiterZhangShu(lower = (0.0,), upper = (1.0,),
+                                               variables = (scalar,),
+                                               polynomial_bounds = true)
+    limiter!(state, nothing, semi, 0.0)
+    @test Trixi.integrate(state, semi; normalize = false) ≈ mass_before
+    interpolation = Trixi.polynomial_interpolation_matrix(solver.basis.nodes,
+                                                          range(-1.0, 1.0; length = 1001))
+    @test minimum(interpolation * state) >= -100 * eps()
+    @test maximum(interpolation * state) <= 1 + 100 * eps()
+
+    # Exact constants and interior linear profiles represented at higher degree
+    # must be left alone, including profiles close to a large nonzero bound.
+    for degree in (0, 1, 5, 8)
+        basis = Trixi.LobattoLegendreBasis(degree)
+        constant_values = map(_ -> 13.392857142857142, basis.nodes)
+        @test Trixi.bounds_preserving_polynomial_extrema(constant_values, basis) ==
+              (first(constant_values), first(constant_values))
+        degree == 0 && continue
+        linear_values = 0.5 .+ 0.25 .* basis.nodes
+        @test all(isapprox.(Trixi.bounds_preserving_polynomial_extrema(linear_values,
+                                                                       basis),
+                            (0.25, 0.75)))
+    end
+
+    # Gauss nodes omit the element endpoints, which can themselves violate a bound.
+    gauss_basis = Trixi.GaussLegendreBasis(1)
+    gauss_values = 0.5 .+ 0.6 .* gauss_basis.nodes
+    @test all(0 .<= gauss_values .<= 1)
+    @test all(isapprox.(Trixi.bounds_preserving_polynomial_extrema(gauss_values,
+                                                                   gauss_basis),
+                        (-0.1, 1.1)))
+
+    # Higher-degree Chebyshev polynomials have several alternating extrema.
+    for degree in (6, 8)
+        basis = Trixi.LobattoLegendreBasis(degree)
+        values = cos.(degree .* acos.(basis.nodes))
+        value_min, value_max = Trixi.bounds_preserving_polynomial_extrema(values,
+                                                                          basis)
+        @test value_min≈-1.0 atol=100 * eps() rtol=0
+        @test value_max≈1.0 atol=100 * eps() rtol=0
+    end
+end
+
+@testitem "Unit: BoundsPreservingLimiterZhangShu Bernstein bounds" setup=[
+    Setup,
+    UnitTests
+] tags=[:misc_part1] begin
+    import Trixi
+    using LinearAlgebra: kron
+    using Trixi: BoundsPreservingLimiterZhangShu, DGSEM, SVector,
+                 LinearScalarAdvectionEquation2D, LinearScalarAdvectionEquation3D,
+                 SemidiscretizationHyperbolic, StructuredMesh, TreeMesh,
+                 boundary_condition_periodic
+
+    scalar(u, equations) = u[1]
+    limiter! = BoundsPreservingLimiterZhangShu(lower = (0.0,), upper = (1.0,),
+                                               variables = (scalar,),
+                                               polynomial_bounds = true)
+    nodal_limiter! = BoundsPreservingLimiterZhangShu(lower = (0.0,), upper = (1.0,),
+                                                     variables = (scalar,))
+
+    # Independent evaluation of Bernstein basis functions verifies the nodal
+    # transformation, including Gauss nodes and reduction to a constant polynomial.
+    for RealT in (Float32, Float64), degree in (0, 1, 3, 5, 8),
+        Basis in (Trixi.LobattoLegendreBasis, Trixi.GaussLegendreBasis)
+
+        basis = Basis(RealT, degree)
+        transform = Trixi.bounds_preserving_bernstein_matrix(basis.nodes)
+        points = (basis.nodes .+ 1) ./ 2
+        bernstein = [binomial(degree, j) * x^j * (1 - x)^(degree - j)
+                     for x in points, j in 0:degree]
+        @test bernstein * transform≈one(transform) atol=100 * eps(RealT)
+    end
+
+    # The product has interior violations although all faces and DG nodes are
+    # admissible. The second case has its extrema on edges/faces. The off-center
+    # quadratic peak additionally exercises reduced-degree polynomials.
+    cubic(x) = x * (1 - x^2)
+    nodal_cubic_max = 4 / (5 * sqrt(5))
+    profiles = (x -> 0.5 + 0.49 * prod(cubic, x) / nodal_cubic_max^length(x),
+                x -> 0.5 + 1.35 * cubic(x[1]) * prod(y -> (1 + y) / 2, x[2:end]),
+                x -> 1.01 - 0.2 * sum(y -> (y - 0.2)^2, x))
+
+    for RealT in (Float32, Float64), dimension in (2, 3)
+        equations = dimension == 2 ?
+                    LinearScalarAdvectionEquation2D(one(RealT), one(RealT)) :
+                    LinearScalarAdvectionEquation3D(one(RealT), one(RealT), one(RealT))
+        coordinates_min = ntuple(_ -> -one(RealT), dimension)
+        coordinates_max = ntuple(_ -> one(RealT), dimension)
+        mesh = TreeMesh(coordinates_min, coordinates_max; initial_refinement_level = 1,
+                        periodicity = true, RealT = RealT)
+        solver = DGSEM(polydeg = 3, RealT = RealT)
+        initial_condition = (x, t, equations) -> SVector(RealT(0.5))
+        semi = SemidiscretizationHyperbolic(mesh, equations, initial_condition, solver;
+                                            boundary_conditions = boundary_condition_periodic)
+        state = Trixi.compute_coefficients(zero(RealT), semi)
+        u = Trixi.wrap_array(state, semi)
+        nodes = CartesianIndices(ntuple(_ -> Trixi.nnodes(solver), dimension))
+        interpolation = Trixi.polynomial_interpolation_matrix(solver.basis.nodes,
+                                                              range(-one(RealT), one(RealT);
+                                                                    length = 21))
+        tensor_interpolation = reduce(kron, ntuple(_ -> interpolation, dimension))
+        sample = state -> tensor_interpolation * reshape(state, length(nodes), :)
+        means = () -> [Trixi.compute_u_mean(u, element,
+                                            Trixi.mesh_equations_solver_cache(semi)...)
+                       for element in axes(u, dimension + 2)]
+
+        for profile in profiles
+            for element in axes(u, dimension + 2), node in nodes
+                x = ntuple(d -> solver.basis.nodes[node[d]], dimension)
+                u[(1, Tuple(node)..., element)...] = profile(x)
+            end
+            @test minimum(state) >= 0
+            @test maximum(state) <= 1
+            @test maximum(sample(state)) > 1
+            original = copy(state)
+            nodal_limiter!(state, nothing, semi, zero(RealT))
+            @test state == original
+            means_before = means()
+            limiter!(state, nothing, semi, zero(RealT))
+            @test means()≈means_before atol=100 * eps(RealT) rtol=100 * eps(RealT)
+            @test minimum(sample(state)) >= -100 * eps(RealT)
+            @test maximum(sample(state)) <= 1 + 100 * eps(RealT)
+        end
+
+        # Subdivision certifies the positive quadratic even though its original
+        # Bernstein enclosure crosses zero. It must not be needlessly limited.
+        for profile in (x -> RealT(0.625), x -> 0.5 + 0.2 * prod(x),
+                        x -> 0.1 + 0.2 * sum(abs2, x))
+            for element in axes(u, dimension + 2), node in nodes
+                x = ntuple(d -> solver.basis.nodes[node[d]], dimension)
+                u[(1, Tuple(node)..., element)...] = profile(x)
+            end
+            original = copy(state)
+            limiter!(state, nothing, semi, zero(RealT))
+            @test state == original
+        end
+
+        # Each one-sided mode leaves values beyond the unused bound untouched.
+        for (lower, upper, value) in ((0.0, nothing, RealT(2)),
+                                      (nothing, 1.0, RealT(-1)))
+            fill!(state, value)
+            one_sided! = BoundsPreservingLimiterZhangShu(lower = (lower,), upper = (upper,),
+                                                         variables = (scalar,),
+                                                         polynomial_bounds = true)
+            one_sided!(state, nothing, semi, zero(RealT))
+            @test all(==(value), state)
+        end
+
+        # Conservation takes precedence if the physical mean is inadmissible.
+        for element in axes(u, dimension + 2), node in nodes
+            u[(1, Tuple(node)..., element)...] = -0.2 + 0.5 * solver.basis.nodes[node[1]]
+        end
+        means_before = means()
+        limiter!(state, nothing, semi, zero(RealT))
+        @test means()≈means_before atol=100 * eps(RealT) rtol=100 * eps(RealT)
+        @test all(isapprox.(state, RealT(-0.2); atol = 100 * eps(RealT)))
+
+        # The same bounds must preserve Jacobian-weighted mass on curved elements.
+        mapping = (xi...) -> SVector(map(x -> (x + 2)^2, xi))
+        curved_mesh = StructuredMesh(ntuple(_ -> 1, dimension), mapping; RealT = RealT,
+                                     periodicity = true)
+        curved_semi = SemidiscretizationHyperbolic(curved_mesh, equations,
+                                                   initial_condition, solver;
+                                                   boundary_conditions = boundary_condition_periodic)
+        curved_state = Trixi.compute_coefficients(zero(RealT), curved_semi)
+        for (index, node) in enumerate(nodes)
+            curved_state[index] = profiles[2](ntuple(d -> solver.basis.nodes[node[d]],
+                                                     dimension))
+        end
+        mass_before = Trixi.integrate(curved_state, curved_semi; normalize = false)
+        limiter!(curved_state, nothing, curved_semi, zero(RealT))
+        @test Trixi.integrate(curved_state, curved_semi; normalize = false)≈mass_before rtol=100 *
+                                                                                             eps(RealT)
+        @test minimum(sample(curved_state)) >= -100 * eps(RealT)
+        @test maximum(sample(curved_state)) <= 1 + 100 * eps(RealT)
+    end
+end
+
 @testitem "Unit: TimeSeriesCallback" setup=[Setup, UnitTests] tags=[:misc_part1] begin
     # Test the 2D TreeMesh version of the callback and some warnings
     @test_trixi_include(joinpath(examples_dir(), "tree_2d_dgsem",

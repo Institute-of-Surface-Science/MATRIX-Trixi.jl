@@ -8,16 +8,23 @@
 @doc raw"""
     LinearDiffusionEquation1D(diffusivity)
 
-The linear diffusion equation (or heat equation) in one space dimension with constant `diffusivity` ``\kappa``:
+The linear diffusion equation (or heat equation) in one space dimension with scalar,
+isotropic `diffusivity` ``\kappa``:
 ```math
 \partial_t u = \partial_1 \left( \kappa \partial_1 u \right).
 ```
+`diffusivity` may be a constant real value or an [`AbstractDiffusivityCoefficient`](@ref).
 Unlike [`LaplaceDiffusion1D`](@ref), which represents the parabolic part of a 
 hyperbolic-parabolic equation, `LinearDiffusionEquation1D` represents a purely parabolic
 equation without any hyperbolic part.
 """
-struct LinearDiffusionEquation1D{RealT <: Real} <: AbstractLaplaceDiffusion{1, 1}
-    diffusivity::RealT
+struct LinearDiffusionEquation1D{D <: AbstractDiffusivityCoefficient} <:
+       AbstractLaplaceDiffusion{1, 1}
+    diffusivity::D
+end
+
+function LinearDiffusionEquation1D(diffusivity::Real)
+    return LinearDiffusionEquation1D(ConstantDiffusivity(diffusivity))
 end
 
 # Together with our specialization of `Adapt.adapt_structure`,
@@ -26,7 +33,20 @@ end
 # to `Float32` to improve performance on GPUs.
 function Base.similar(equations::LinearDiffusionEquation1D,
                       ::Type{NewRealT}) where {NewRealT}
-    return LinearDiffusionEquation1D(convert(NewRealT, equations.diffusivity))
+    return LinearDiffusionEquation1D(similar(equations.diffusivity, NewRealT))
+end
+
+@inline function have_constant_diffusivity(equations::LinearDiffusionEquation1D)
+    return have_constant_diffusivity(equations.diffusivity)
+end
+
+@inline function have_space_time_dependent_flux(equations::LinearDiffusionEquation1D)
+    return have_space_time_dependent_flux(equations.diffusivity)
+end
+
+@inline function max_diffusivity(u, x, t,
+                                 equations::LinearDiffusionEquation1D)
+    return diffusivity_upper_bound(equations.diffusivity)
 end
 
 varnames(::typeof(cons2cons), ::LinearDiffusionEquation1D) = ("scalar",)
@@ -41,8 +61,38 @@ varnames(::typeof(cons2entropy), ::LinearDiffusionEquation1D) = ("scalar",)
 
 @inline function flux(u, gradients, orientation::Integer,
                       equations::LinearDiffusionEquation1D)
+    return flux(u, gradients, orientation,
+                have_space_time_dependent_flux(equations), equations)
+end
+
+@inline function flux(u, gradients, orientation::Integer, ::False,
+                      equations::LinearDiffusionEquation1D)
     dudx, = gradients
     # orientation == 1
-    return equations.diffusivity * dudx
+    diffusivity = diffusivity_value(equations.diffusivity, equations)
+    return diffusivity * dudx
+end
+
+@inline function flux(u, gradients, orientation::Integer, ::True,
+                      equations::LinearDiffusionEquation1D)
+    throw(ArgumentError("space- or time-dependent diffusivity requires coordinates and time"))
+end
+
+@inline function flux(u, gradients, orientation::Integer, x, t,
+                      equations::LinearDiffusionEquation1D)
+    return flux(u, gradients, orientation, x, t,
+                have_space_time_dependent_flux(equations), equations)
+end
+
+@inline function flux(u, gradients, orientation::Integer, x, t, ::False,
+                      equations::LinearDiffusionEquation1D)
+    return flux(u, gradients, orientation, equations)
+end
+
+@inline function flux(u, gradients, orientation::Integer, x, t, ::True,
+                      equations::LinearDiffusionEquation1D)
+    diffusivity = diffusivity_value(equations.diffusivity, u, x, t, equations)
+    dudx, = gradients
+    return SVector(diffusivity * dudx)
 end
 end # @muladd

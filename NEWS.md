@@ -8,6 +8,23 @@ for human readability.
 ## Changes in the MATRIX-Trixi.jl fork
 
 #### Added
+- Added the optional `polynomial_bounds=true` mode to
+  `BoundsPreservingLimiterZhangShu` for affine variables in one-, two-, and
+  three-dimensional DGSEM solutions. It uses extrema in 1D and conservative
+  Bernstein enclosures in 2D/3D to include values between nodes in the correction,
+  keeping spatially interpolated concentration profiles bounded up to roundoff
+  when element means are admissible. The combined MATRIX API version is `1.3.0`.
+- `LinearDiffusionEquation1D` now supports diffusivity coefficient providers,
+  including stage-time evaluation and guaranteed upper bounds for timestep
+  selection ([Institute-of-Surface-Science/MATRIX-Trixi.jl#15](https://github.com/Institute-of-Surface-Science/MATRIX-Trixi.jl/pull/15)).
+- Added `BoundsPreservingLimiterZhangShu`, a conservative one-sided or two-sided
+  nodal bounds limiter for DGSEM solutions in one, two, and three dimensions. It can be
+  used as an OrdinaryDiffEq stage limiter or solve-level step limiter, including with
+  adaptive implicit `TRBDF2` integration of local-DG parabolic diffusion
+  ([Institute-of-Surface-Science/MATRIX-Trixi.jl#14](https://github.com/Institute-of-Surface-Science/MATRIX-Trixi.jl/pull/14),
+  [Institute-of-Surface-Science/MATRIX-Trixi.jl#16](https://github.com/Institute-of-Surface-Science/MATRIX-Trixi.jl/pull/16)).
+  OrdinaryDiffEqCore v4.15.3 or newer is required for the released FSAL derivative
+  refresh fix ([SciML/OrdinaryDiffEq.jl#4035](https://github.com/SciML/OrdinaryDiffEq.jl/pull/4035)).
 - Added `VariableBoundsCallback` for diagnostic monitoring of one-sided or two-sided
   bounds on state components and derived scalar quantities, including tolerance-aware
   violations, nonfinite detection, optional file output, MPI reductions, and termination

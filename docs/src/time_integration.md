@@ -25,9 +25,14 @@ are the following. Further documentation can be found in the
   (try to) save the numerical solution after every time step in RAM (until you run
   out of memory or start to swap).
 - You can set the maximal number of time steps via `maxiters = ...`.
-- SSP methods and many low-storage methods from OrdinaryDiffEq.jl support
-  `stage_limiter!`s and `step_limiter!`s, e.g., [`PositivityPreservingLimiterZhangShu`](@ref) and [`EntropyBoundedLimiter`](@ref)
-  from Trixi.jl.
+- OrdinaryDiffEq.jl supports solve-level `stage_limiter` and `step_limiter` options, e.g.,
+  [`PositivityPreservingLimiterZhangShu`](@ref),
+  [`BoundsPreservingLimiterZhangShu`](@ref), and [`EntropyBoundedLimiter`](@ref)
+  from Trixi.jl. A solve-level `step_limiter` can be used with adaptive implicit methods
+  such as `TRBDF2`; OrdinaryDiffEq applies it to accepted endpoints after forming the
+  embedded error estimate. OrdinaryDiffEqCore v4.15.3 or newer refreshes FSAL derivatives
+  before the next step. Per-algorithm `stage_limiter!` and `step_limiter!` constructor
+  fields are deprecated compatibility syntax.
 - If you start Julia with multiple threads and want to use them also in the time
   integration method from OrdinaryDiffEq.jl, you need to pass the keyword argument
   `thread = Trixi.Threaded()` to the algorithm, e.g.,

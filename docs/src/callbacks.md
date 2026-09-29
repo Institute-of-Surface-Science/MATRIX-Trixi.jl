@@ -188,10 +188,69 @@ more callbacks, you need to turn them into a `CallbackSet` first by calling
           should therefore be called after `StepsizeCallback`
 
 
-## Stage callbacks
+## Stage and step limiters
 [`PositivityPreservingLimiterZhangShu`](@ref) is a positivity-preserving limiter, used to enforce
 physical constraints. An example elixir using this feature can be found at
 [`examples/tree_2d_dgsem/elixir_euler_positivity.jl`](https://github.com/trixi-framework/Trixi.jl/blob/main/examples/tree_2d_dgsem/elixir_euler_positivity.jl).
+
+[`BoundsPreservingLimiterZhangShu`](@ref) enforces one-sided or two-sided nodal bounds
+while preserving every element mean. For example, a scalar concentration can be limited
+to `[0, 1]` during implicit diffusion integration as follows:
+```julia
+using ADTypes: AutoFiniteDiff
+using OrdinaryDiffEqSDIRK: TRBDF2
+
+concentration(u, equations) = u[1]
+limiter! = BoundsPreservingLimiterZhangShu(lower = (0.0,),
+                                           upper = (1.0,),
+                                           variables = (concentration,),
+                                           polynomial_bounds = true)
+algorithm = TRBDF2(; autodiff = AutoFiniteDiff())
+
+sol = solve(ode, algorithm;
+            adaptive = true,
+            step_limiter = limiter!)
+```
+The tuples may contain `nothing` for unused sides. The limiter scales each element's
+nodal states towards its mean, so it cannot repair a mean that is itself outside the
+configured interval without sacrificing conservation. Use [`VariableBoundsCallback`](@ref)
+independently to verify accepted states and diagnose this case. Bounds hold up to
+floating-point roundoff; configure the diagnostic tolerance accordingly.
+
+For affine variables such as concentration in one-, two-, and three-dimensional
+DGSEM solutions, `polynomial_bounds=true` also bounds the polynomial between nodes.
+In 1D, it evaluates the element endpoints and all sign-changing stationary points.
+In 2D and 3D, it converts the tensor-product polynomial to Bernstein coefficients,
+whose range encloses the values throughout the element, including faces and interior.
+Midpoint subdivision tightens this enclosure, with at most two bisections per
+coordinate (16 subboxes in 2D and 64 in 3D). This work limit retains a conservative
+enclosure, which can cause more limiting than exact extrema. The method follows the
+[Bernstein range-enclosure property](https://interval.louisiana.edu/reliable-computing-journal/volume-14/reliable-computing-14-pp-117-137.pdf).
+
+Both approaches scale about the physical element mean, preserving conservation on
+mapped elements. Spatial resampling of the limited polynomial remains bounded up
+to roundoff when that mean is admissible. The default `polynomial_bounds=false`
+only bounds nodal values. Polynomial bounds do not apply to nonlinear functions
+of the interpolated state. An inadmissible element mean remains a violation in
+either mode; it is not clipped.
+
+Solve-level bounds limiting requires OrdinaryDiffEqCore v4.15.3 or newer.
+OrdinaryDiffEq forms an adaptive method's embedded error estimate and accepts the
+step before applying the solve-level `step_limiter`. For each element, this limiter
+replaces every nodal state ``u_i`` by ``\bar{u} + \theta (u_i - \bar{u})`` with
+``0 \leq \theta \leq 1``. It therefore preserves the element mean and cannot increase
+nodal deviations from that mean. The adaptive tolerances control the underlying
+unprojected time-integration step, while [`VariableBoundsCallback`](@ref) independently
+checks the accepted, limited states. OrdinaryDiffEq automatically refreshes FSAL
+derivatives after a nontrivial solve-level limiter. Passing `step_limiter!` to an
+algorithm constructor is deprecated compatibility syntax; prefer the solve-level
+`step_limiter` keyword.
+
+OrdinaryDiffEq dense-output values at `saveat` times between accepted steps are
+interpolants and are not passed through the limiter. If saved states must satisfy the
+bounds, include the output times in `tstops` so they become accepted step endpoints.
+A complete implicit diffusion example is available at
+`examples/tree_1d_dgsem/elixir_diffusion_perfect_sink_limiter.jl`.
 
 ## Implementing new callbacks
 Since Trixi.jl is compatible with [OrdinaryDiffEq.jl](https://github.com/SciML/OrdinaryDiffEq.jl),

@@ -19,7 +19,8 @@ mesh = TreeMesh(0.0, 1.0,
                 periodicity = false)
 
 function analytical_solution(x, t, equations)
-    scalar = sinpi(x[1]) * exp(-equations.diffusivity * pi^2 * t)
+    diffusivity = Trixi.diffusivity_value(equations.diffusivity, equations)
+    scalar = sinpi(x[1]) * exp(-diffusivity * pi^2 * t)
     return SVector(scalar)
 end
 initial_condition = analytical_solution
@@ -58,6 +59,12 @@ callbacks = CallbackSet(summary_callback, analysis_callback, alive_callback)
 # OrdinaryDiffEq's `solve` method evolves the solution in time and executes the passed callbacks.
 # The implicit TRBDF2 method removes the parabolic time-step restriction of explicit schemes.
 time_int_tol = 1.0e-10
-sol = solve(ode, TRBDF2(; autodiff = AutoFiniteDiff());
+algorithm = TRBDF2(; autodiff = AutoFiniteDiff())
+adaptive = true
+step_limiter = nothing
+limiter_options = isnothing(step_limiter) ? (;) : (; step_limiter)
+sol = solve(ode, algorithm;
             abstol = time_int_tol, reltol = time_int_tol,
-            dt = 1.0e-2, ode_default_options()..., callback = callbacks)
+            dt = 1.0e-2, adaptive = adaptive,
+            ode_default_options()..., callback = callbacks,
+            limiter_options...)

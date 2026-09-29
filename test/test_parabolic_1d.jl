@@ -836,8 +836,8 @@ end
                         linf=[4.066890902476583e-5])
     @test Trixi.SciMLBase.successful_retcode(sol.retcode)
     fine_l2_error, fine_linf_error = analysis_callback(sol)
-    @test all(fine_l2_error .< [0.00011127464521867602])
-    @test all(fine_linf_error .< [0.0006347956752195128])
+    @test all(fine_l2_error .< [0.00011127466265713273])
+    @test all(fine_linf_error .< [0.0006347957914810687])
     @test have_space_time_dependent_flux(equations) == Trixi.True()
 
     semi_flux_only = remake(semi; source_terms = nothing)
@@ -855,8 +855,9 @@ end
     @test Trixi.flux(SVector(1.0), gradients, 1, x, 0.0, equations) !=
           Trixi.flux(SVector(1.0), gradients, 1, x, 0.5, equations)
 
-    monotonic_diffusivity = (x, t) -> 0.1 * (1 + t)
-    equations_monotonic = TimeDependentDiffusionEquation1D(monotonic_diffusivity)
+    monotonic_diffusivity_value = (x, t, equations) -> 0.1 * (1 + t)
+    monotonic_diffusivity = SpatiallyVaryingDiffusivity(monotonic_diffusivity_value, 0.15)
+    equations_monotonic = LinearDiffusionEquation1D(monotonic_diffusivity)
     semi_monotonic = remake(semi; equations = equations_monotonic)
     ode_monotonic = semidiscretize(semi_monotonic, tspan)
     u_monotonic = Trixi.wrap_array(ode_monotonic.u0, semi_monotonic)
@@ -869,8 +870,8 @@ end
                             have_constant_diffusivity(equations_monotonic),
                             equations_monotonic, equations_monotonic, solver,
                             semi_monotonic.cache)
-    @test dt_final < dt_initial
-    @test dt_final ≈ dt_initial / (1 + t_final)
+    @test dt_final ≈ dt_initial
+    @test max_diffusivity(SVector(1.0), x, t_final, equations_monotonic) == 0.15
 
     @test_allocations(Trixi.rhs_parabolic!, semi, sol, 1000)
 end
@@ -882,8 +883,8 @@ end
     @test_trixi_include(joinpath(EXAMPLES_DIR, "tree_1d_dgsem",
                                  "elixir_diffusion_time_dependent_coefficients.jl"),
                         initial_refinement_level=3,
-                        l2=[0.00011127464521867602],
-                        linf=[0.0006347956752195128])
+                        l2=[0.00011127466265713273],
+                        linf=[0.0006347957914810687])
     @test Trixi.SciMLBase.successful_retcode(sol.retcode)
     coarse_l2_error, coarse_linf_error = analysis_callback(sol)
     @test all([6.984694319086482e-6] .< coarse_l2_error)
@@ -948,6 +949,127 @@ end
     # Ensure that we do not have excessive memory allocations
     # (e.g., from type instabilities)
     @test_allocations(Trixi.rhs_parabolic!, semi, sol, 1000)
+end
+
+@testitem "Parabolic1D: BoundsPreservingLimiterZhangShu perfect sink" setup=[
+    Setup,
+    Parabolic1D
+] tags=[:parabolic_part1] begin
+    elixir = joinpath(EXAMPLES_DIR, "tree_1d_dgsem",
+                      "elixir_diffusion_perfect_sink_limiter.jl")
+
+    trixi_include(@__MODULE__, elixir, tspan = (0.0, 0.002))
+    @test Trixi.SciMLBase.successful_retcode(sol.retcode)
+    limited_result = variable_bounds_callback(sol).concentration
+    @test !isviolated(limited_result)
+    @test limited_result.minimum >= -1.0e-12
+    @test limited_result.maximum <= 1.0 + 1.0e-12
+    @test variable_bounds_callback.affect!.violations_detected == 0
+    @test variable_bounds_callback.affect!.checks_performed == sol.stats.naccept + 1
+
+    # The diagnostic callback must not clear the limiter's FSAL refresh request.
+    integrator = Trixi.init(ode, algorithm;
+                            abstol = time_int_tol, reltol = time_int_tol,
+                            dt = 1.0e-3, adaptive = true,
+                            step_limiter = limiter!, callback = variable_bounds_callback,
+                            Trixi.ode_default_options()...)
+    Trixi.step!(integrator)
+    Trixi.step!(integrator)
+    expected_fsalfirst = similar(integrator.fsalfirst)
+    integrator.f(expected_fsalfirst, integrator.uprev, integrator.p,
+                 integrator.tprev)
+    @test integrator.fsalfirst ≈ expected_fsalfirst
+
+    # Make output times accepted endpoints so saved profiles are limited, too.
+    observation_times = [0.0, 2.0e-5, 1.0e-4, 5.0e-4, 2.0e-3]
+    saved_solution = solve(ode, algorithm;
+                           abstol = time_int_tol, reltol = time_int_tol,
+                           dt = 1.0e-3, adaptive = true,
+                           step_limiter = limiter!, callback = variable_bounds_callback,
+                           saveat = observation_times, tstops = observation_times,
+                           save_everystep = false, save_start = true, save_end = true)
+    @test Trixi.SciMLBase.successful_retcode(saved_solution.retcode)
+    @test saved_solution.t == observation_times
+    @test all(u -> minimum(u) >= -1.0e-12, saved_solution.u)
+    @test all(u -> maximum(u) <= 1.0 + 1.0e-12, saved_solution.u)
+    interpolation = Trixi.polynomial_interpolation_matrix(solver.basis.nodes,
+                                                          range(-1.0, 1.0; length = 101))
+    saved_profiles = [interpolation * reshape(u, Trixi.nnodes(solver), :)
+                      for u in saved_solution.u]
+    @test all(u -> minimum(u) >= -1.0e-12, saved_profiles)
+    @test all(u -> maximum(u) <= 1.0 + 1.0e-12, saved_profiles)
+    @test variable_bounds_callback.affect!.violations_detected == 0
+    @test variable_bounds_callback.affect!.checks_performed ==
+          saved_solution.stats.naccept + 1
+
+    no_limiter! = (u, integrator, semi, t) -> nothing
+    trixi_include(@__MODULE__, elixir, tspan = (0.0, 0.001), limiter! = no_limiter!)
+    @test Trixi.SciMLBase.successful_retcode(sol.retcode)
+    @test variable_bounds_callback.affect!.violations_detected > 0
+    @test variable_bounds_callback.affect!.worst_lower_violation[1] > 1.0e-3
+    @test variable_bounds_callback.affect!.worst_upper_violation[1] > 1.0e-3
+end
+
+@testitem "Parabolic1D: BoundsPreservingLimiterZhangShu smooth convergence" setup=[
+    Setup,
+    Parabolic1D
+] tags=[:parabolic_part1] begin
+    using ADTypes: AutoFiniteDiff
+    using OrdinaryDiffEqSDIRK: TRBDF2
+    import Trixi
+    using Trixi: BoundsPreservingLimiterZhangShu, trixi_include
+
+    smooth_variable(u, equations) = u[1]
+    algorithm = TRBDF2(; autodiff = AutoFiniteDiff())
+    elixir = joinpath(EXAMPLES_DIR, "tree_1d_dgsem",
+                      "elixir_diffusion_ldg_implicit.jl")
+
+    for polynomial_bounds in (false, true)
+        limiter! = BoundsPreservingLimiterZhangShu(lower = (0.0,), upper = (1.0,),
+                                                   variables = (smooth_variable,),
+                                                   polynomial_bounds = polynomial_bounds)
+        trixi_include(@__MODULE__, elixir,
+                      initial_refinement_level = 3, tspan = (0.0, 0.1),
+                      algorithm = algorithm, callbacks = nothing,
+                      dt = 1.0e-3, adaptive = true, step_limiter = limiter!)
+        @test Trixi.SciMLBase.successful_retcode(sol.retcode)
+        coarse_l2_error, coarse_linf_error = analysis_callback(sol)
+
+        trixi_include(@__MODULE__, elixir,
+                      initial_refinement_level = 4, tspan = (0.0, 0.1),
+                      algorithm = algorithm, callbacks = nothing,
+                      dt = 1.0e-3, adaptive = true, step_limiter = limiter!)
+        @test Trixi.SciMLBase.successful_retcode(sol.retcode)
+        fine_l2_error, fine_linf_error = analysis_callback(sol)
+
+        @test all(fine_l2_error .< coarse_l2_error / 4)
+        @test all(fine_linf_error .< coarse_linf_error / 4)
+
+        trixi_include(@__MODULE__, elixir,
+                      initial_refinement_level = 3, tspan = (0.0, 0.1),
+                      algorithm = algorithm, callbacks = nothing,
+                      dt = 1.0e-3, adaptive = true, step_limiter = nothing)
+        @test Trixi.SciMLBase.successful_retcode(sol.retcode)
+        unlimited_coarse_l2_error, unlimited_coarse_linf_error = analysis_callback(sol)
+
+        trixi_include(@__MODULE__, elixir,
+                      initial_refinement_level = 4, tspan = (0.0, 0.1),
+                      algorithm = algorithm, callbacks = nothing,
+                      dt = 1.0e-3, adaptive = true, step_limiter = nothing)
+        @test Trixi.SciMLBase.successful_retcode(sol.retcode)
+        unlimited_fine_l2_error, unlimited_fine_linf_error = analysis_callback(sol)
+
+        @test all(unlimited_fine_l2_error .< unlimited_coarse_l2_error / 4)
+        @test all(unlimited_fine_linf_error .< unlimited_coarse_linf_error / 4)
+
+        coarse_l2_impact = abs.(coarse_l2_error - unlimited_coarse_l2_error)
+        coarse_linf_impact = abs.(coarse_linf_error - unlimited_coarse_linf_error)
+        fine_l2_impact = abs.(fine_l2_error - unlimited_fine_l2_error)
+        fine_linf_impact = abs.(fine_linf_error - unlimited_fine_linf_error)
+
+        @test all(fine_l2_impact .< coarse_l2_impact)
+        @test all(fine_linf_impact .< coarse_linf_impact)
+    end
 end
 
 @testitem "Parabolic1D: VariableBoundsCallback" setup=[Setup, Parabolic1D] tags=[

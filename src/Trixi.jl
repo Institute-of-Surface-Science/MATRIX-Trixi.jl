@@ -20,7 +20,7 @@ module Trixi
 
 Version of the public API added by the MATRIX-Trixi fork.
 """
-const MATRIX_TRIXI_API_VERSION = v"1.0.0"
+const MATRIX_TRIXI_API_VERSION = v"1.3.0"
 
 using Preferences: @load_preference, set_preferences!
 const _PREFERENCE_SQRT = @load_preference("sqrt", "sqrt_Trixi_NaN")
@@ -389,8 +389,8 @@ export load_mesh, load_time, load_timestep, load_timestep!, load_dt,
 export ControllerThreeLevel, ControllerThreeLevelCombined,
        IndicatorLöhner, IndicatorLoehner, IndicatorMax, IndicatorNodalFunction
 
-export PositivityPreservingLimiterZhangShu, PositivityPreservingLimiterLiuZhang,
-       EntropyBoundedLimiter
+export PositivityPreservingLimiterZhangShu, BoundsPreservingLimiterZhangShu,
+       PositivityPreservingLimiterLiuZhang, EntropyBoundedLimiter
 
 export trixi_include, examples_dir, get_examples, default_example,
        default_example_unstructured, ode_default_options
